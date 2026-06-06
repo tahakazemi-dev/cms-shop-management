@@ -359,18 +359,15 @@ th {
     gap: 5px;
 }
 
-/* INVENTORY FORM: SINGLE ROW (چیدمان خطی انبار) */
-/* فایل style.css */
 .grid-single-row {
     display: grid;
-    /* تنظیم عرض ستون‌ها برای 7 فیلد */
-    grid-template-columns: 1.8fr 0.7fr 1.5fr 0.8fr 1fr 0.6fr 1fr;
+    /* توزیع خودکار فیلدها بر اساس عرض صفحه با حداقل عرض ۱۲۰ پیکسل برای هر فیلد */
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 10px;
     align-items: center;
     margin-bottom: 15px;
 }
 
-/* در موبایل یا صفحه کوچک بشکنه */
 @media (max-width: 1200px) {
     .grid-single-row {
         grid-template-columns: repeat(3, 1fr);
