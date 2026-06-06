@@ -1,5 +1,5 @@
 /**
- * Carpet Manager System - Installment & Check Fully Integrated Edition
+ * Carpet Manager System - Fully Fixed Global Functions Edition
  */
 
 // --- متغیرهای سراسری ---
@@ -18,27 +18,161 @@ const categoryMap = {
     other: 'سایر'
 };
 
-document.addEventListener('DOMContentLoaded', () => {
+// تنظیمات اتصال به دیتابیس IndexedDB
+const DB_NAME = 'CarpetManagerIndexedDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'AppData';
+
+// تابع راه‌اندازی و اتصال به IndexedDB
+function getDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME);
+            }
+        };
+        request.onsuccess = (e) => resolve(e.target.result);
+        request.onerror = (e) => reject(e.target.error);
+    });
+}
+
+// خواندن اطلاعات به صورت آسنکرون از IndexedDB در بدو ورود
+async function loadDataFromIndexedDB() {
+    try {
+        const db = await getDB();
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const dataRequest = store.get('app_state');
+
+        return new Promise((resolve) => {
+            dataRequest.onsuccess = () => {
+                const result = dataRequest.result;
+                if (result) {
+                    products = result.products || [];
+                    transactions = result.transactions || [];
+                    returns = result.returns || [];
+                    deletedProducts = result.deletedProducts || [];
+                    deletedTransactions = result.deletedTransactions || [];
+                    resolve();
+                } else {
+                    // بازیابی اطلاعات قدیمی از LocalStorage در لود اول برای حفظ پایداری داده‌ها
+                    loadDataFromLocalStorageFallback();
+                    resolve();
+                }
+            };
+            dataRequest.onerror = () => {
+                loadDataFromLocalStorageFallback();
+                resolve();
+            };
+        });
+    } catch (err) {
+        loadDataFromLocalStorageFallback();
+    }
+}
+
+// بازیابی اطلاعات قدیمی و زاپاس از LocalStorage
+function loadDataFromLocalStorageFallback() {
+    if (localStorage.getItem('cm_products_v5')) products = JSON.parse(localStorage.getItem('cm_products_v5'));
+    if (localStorage.getItem('cm_transactions_v5')) transactions = JSON.parse(localStorage.getItem('cm_transactions_v5'));
+    if (localStorage.getItem('cm_returns_v5')) returns = JSON.parse(localStorage.getItem('cm_returns_v5'));
+    if (localStorage.getItem('cm_deleted_p_v5')) deletedProducts = JSON.parse(localStorage.getItem('cm_deleted_p_v5'));
+    if (localStorage.getItem('cm_deleted_t_v5')) deletedTransactions = JSON.parse(localStorage.getItem('cm_deleted_t_v5'));
+    saveData();
+}
+
+// ذخیره اطلاعات به صورت همزمان روی IndexedDB و LocalStorage (به عنوان زاپاس)
+async function saveData() {
+    localStorage.setItem('cm_products_v5', JSON.stringify(products));
+    localStorage.setItem('cm_transactions_v5', JSON.stringify(transactions));
+    localStorage.setItem('cm_returns_v5', JSON.stringify(returns));
+    localStorage.setItem('cm_deleted_p_v5', JSON.stringify(deletedProducts));
+    localStorage.setItem('cm_deleted_t_v5', JSON.stringify(deletedTransactions));
+
+    try {
+        const db = await getDB();
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+
+        const state = {
+            products,
+            transactions,
+            returns,
+            deletedProducts,
+            deletedTransactions
+        };
+
+        store.put(state, 'app_state');
+    } catch (err) {
+        console.error("IndexedDB Save Error:", err);
+    }
+}
+
+// بررسی زمان آخرین بکاپ و اجرای بکاپ خودکار دو روزه
+async function checkAndTriggerAutoBackup() {
+    const lastBackupTime = localStorage.getItem('cm_last_backup_time');
+    const now = Date.now();
+    const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
+
+    if (!lastBackupTime) {
+        localStorage.setItem('cm_last_backup_time', now.toString());
+        return;
+    }
+
+    if (now - parseInt(lastBackupTime) >= twoDaysMs) {
+        triggerSilentBackupDownload();
+        localStorage.setItem('cm_last_backup_time', now.toString());
+    }
+}
+
+// تابع دانلود بی‌صدا بکاپ بدون تداخل با برنامه
+function triggerSilentBackupDownload() {
+    const d = { products, transactions, returns, deletedProducts, deletedTransactions };
+    const b = new Blob([JSON.stringify(d)], { type: "application/json" });
+    const u = URL.createObjectURL(b);
+
+    const a = document.createElement('a');
+    a.href = u;
+
+    const dateFormatted = new Date().toLocaleDateString('fa-IR').replace(/\//g, '-');
+    a.download = `auto_backup_${dateFormatted}.json`;
+
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(u);
+}
+
+// اجرای آسنکرون برنامه پس از لود کامل دیتابیس
+document.addEventListener('DOMContentLoaded', async () => {
     // 1. بررسی لاگین
     if (sessionStorage.getItem('isLoggedIn') === 'true') {
         const overlay = document.getElementById('loginOverlay');
         if (overlay) overlay.style.display = 'none';
     }
 
-    // 2. لود دیتا
-    loadData();
-    cleanupTrash();
+    // 2. لود دیتا از IndexedDB به صورت آسنکرون
+    try {
+        await loadDataFromIndexedDB();
+        cleanupTrash();
 
-    // 3. رندر اولیه
-    updateDashboard();
-    updateAccounting();
-    renderInventoryTable();
-    renderReturnsTable();
-    renderTrash();
-    populateCustomSelect();
-    calculateInventoryStats();
-    setupEnterNavigation();
-    renderAccounts(); // رندر بخش اقساط و چک‌ها
+        // چک کردن نیاز به بکاپ روزانه
+        await checkAndTriggerAutoBackup();
+
+        // 3. رندر اولیه پس از اطمینان از دریافت داده‌ها
+        updateDashboard();
+        updateAccounting();
+        renderInventoryTable();
+        renderReturnsTable();
+        renderTrash();
+        populateCustomSelect();
+        calculateInventoryStats();
+        setupEnterNavigation();
+        renderAccounts();
+    } catch (err) {
+        console.error("خطا در بارگذاری اولیه داده‌ها:", err);
+    }
 
     // 4. تاریخ
     const options = { year: 'numeric', month: 'long', day: 'numeric' };
@@ -55,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ==========================================
-// 1. لاگین
+// توابع مدیریت لاگین و تاریخ
 // ==========================================
 function checkLogin() {
     const pass = document.getElementById('loginPass').value;
@@ -67,9 +201,6 @@ function checkLogin() {
     }
 }
 
-// ==========================================
-// 2. تابع محاسباتی تاریخ شمسی (افزودن ماه بدون نیاز به لایبرری خارجی)
-// ==========================================
 function addJalaliMonths(dateStr, monthsToAdd) {
     const parts = dateStr.split('/');
     if (parts.length !== 3) return dateStr;
@@ -83,10 +214,8 @@ function addJalaliMonths(dateStr, monthsToAdd) {
         y += 1;
     }
 
-    // تصحیح روزها بر اساس ماه‌های ۳۱ و ۳۰ روزه شمسی
     if (m > 6 && m < 12 && d > 30) d = 30;
     if (m === 12) {
-        // سال‌های کبیسه تقریبی شمسی
         let isLeap = [1, 5, 9, 13, 17, 22, 26, 30].includes(y % 33);
         if (isLeap && d > 30) d = 30;
         if (!isLeap && d > 29) d = 29;
@@ -98,17 +227,176 @@ function addJalaliMonths(dateStr, monthsToAdd) {
 }
 
 // ==========================================
-// 3. مدیریت صندوق فروش و محاسبات فاکتور
+// توابع چاپ فاکتور و لیبل
 // ==========================================
+function printLabel(id) {
+    const product = products.find(p => p.id === id);
+    if (!product) return;
 
-// کنترل فیلدهای تسویه در صفحه فروش
+    const barcodeSVG = createBarcodeSVG(product.barcode);
+    const printArea = document.getElementById('printArea');
+    printArea.className = 'label-mode';
+
+    printArea.innerHTML = `
+        <div class="label-container">
+            <div class="label-name">${product.name}</div>
+            <div class="label-brand">${product.brand || ''}</div>
+            <div class="dashed-line"></div>
+            <div class="label-price">${product.sellPrice.toLocaleString()}</div>
+            <div class="label-unit">ریال</div>
+            <div class="dashed-line"></div>
+            <div class="label-name">موجودی : ${product.stock}</div>
+            <div class="barcode-wrapper" style="width:100%; height:60px; margin: 10px 0;">
+                ${barcodeSVG}
+            </div>
+            <div class="label-brand">${product.barcode}</div>
+        </div>
+    `;
+
+    window.print();
+    setTimeout(() => { printArea.innerHTML = ''; printArea.className = ''; }, 1000);
+}
+
+function printInvoice(transId) {
+    const transaction = transactions.find(t => t.id === transId);
+    if (!transaction) return;
+
+    const printArea = document.getElementById('printArea');
+    printArea.className = 'invoice-mode';
+
+    let itemsHtml = '';
+    if (transaction.items && Array.isArray(transaction.items)) {
+        transaction.items.forEach(item => {
+            let unitPrice = item.total / item.amount;
+            itemsHtml += `
+                <tr>
+                    <td class="col-name">${item.productName}</td>
+                    <td class="col-qty">${item.amount}</td>
+                    <td class="col-price">${Math.round(unitPrice).toLocaleString()}</td>
+                    <td class="col-total">${item.total.toLocaleString()}</td>
+                </tr>
+            `;
+        });
+    } else {
+        itemsHtml += `
+            <tr>
+                <td class="col-name">${transaction.productName}</td>
+                <td class="col-qty">${transaction.amount}</td>
+                <td class="col-price">-</td>
+                <td class="col-total">${transaction.totalPrice.toLocaleString()}</td>
+            </tr>
+        `;
+    }
+
+    printArea.innerHTML = `
+        <style>
+            @media print {
+                @page { margin: 0; }
+                body { margin: 0; padding: 0; }
+            }
+            .invoice-container {
+                width: 72mm;
+                margin: 0 auto;
+                padding: 5px 2px;
+                font-family: 'Tahoma', sans-serif;
+                font-size: 10px;
+                color: black;
+                direction: rtl;
+                line-height: 1.4;
+            }
+            .inv-header {
+                text-align: center;
+                border-bottom: 2px solid #000;
+                padding-bottom: 5px;
+                margin-bottom: 5px;
+            }
+            .inv-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
+            .inv-info { font-size: 9px; font-weight: bold; margin-bottom: 2px; }
+            
+            .inv-customer-box {
+                border: 1px dashed #000;
+                border-radius: 4px;
+                padding: 5px;
+                margin-bottom: 8px;
+                font-size: 10px;
+            }
+            
+            table { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
+            th { border-bottom: 1px solid #000; padding: 2px 0; font-size: 9px; font-weight: bold; }
+            td { border-bottom: 1px dotted #444; padding: 4px 0; font-size: 9px; vertical-align: top; }
+            
+            .col-name { width: 38%; text-align: right; }
+            .col-qty { width: 12%; text-align: center; }
+            .col-price { width: 22%; text-align: center; }
+            .col-total { width: 28%; text-align: left; font-weight: bold; }
+
+            .inv-total-row {
+                border-top: 2px solid #000;
+                padding-top: 5px;
+                font-size: 14px;
+                font-weight: 900;
+                text-align: center;
+                margin-top: 5px;
+            }
+            .inv-footer { text-align: center; margin-top: 10px; font-size: 9px; border-top: 1px dashed #000; padding-top:5px; }
+        </style>
+
+        <div class="invoice-container">
+            <div class="inv-header">
+                <div class="inv-title">تزئینات نوین ظریف مصور</div>
+                <div class="inv-info">نمایندگی موکت ظریف مصور احمدی</div>
+                <div class="inv-info">پیج اینستاگرام : zarifmosavarmis</div>
+                <div class="inv-info">شماره تماس : 09928905769 , 09938812959</div>
+                <div class="inv-info">آدرس : پنج بنگله , بالاتر از فروشگاه رفاه جنب فروشگاه جانبو</div>
+            </div>
+
+            <div class="inv-customer-box">
+                <div><strong>مشتری:</strong> ${transaction.customerName || 'ناشناس'}</div>
+                <div style="margin-top:2px"><strong>تاریخ:</strong> ${transaction.date}</div>
+                <div style="margin-top:2px; font-size:9px">شماره فاکتور: ${Math.floor(transaction.id).toString().slice(-6)}</div>
+                <div><strong>شماره تلفن :</strong> ${transaction.custPhone || 'ناشناس'}</div>
+            </div>
+
+            <table class="invoice-table">
+                <thead>
+                    <tr>
+                        <th class="col-name">شرح</th>
+                        <th class="col-qty">تعداد</th>
+                        <th class="col-price">فی</th>
+                        <th class="col-total">کل (ریال)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${itemsHtml}
+                </tbody>
+            </table>
+
+            <div class="inv-total-row">
+                جمع کل: ${transaction.totalPrice.toLocaleString()} ریال
+            </div>
+
+            <div class="inv-footer">
+                * از خرید شما سپاسگزاریم *
+            </div>
+        </div>
+    `;
+
+    window.print();
+    setTimeout(() => {
+        printArea.innerHTML = '';
+        printArea.className = '';
+    }, 1000);
+}
+
+// ==========================================
+// مدیریت بخش فروش و تسویه
+// ==========================================
 function togglePaymentFields() {
     const type = document.getElementById('paymentType').value;
     const downGroup = document.getElementById('downPaymentGroup');
     const checkFields = document.getElementById('checkFields');
     const instFields = document.getElementById('installmentFields');
 
-    // پیش‌فرض کردن تاریخ‌های چک و قسط اول به صورت خودکار
     const today = new Date().toLocaleDateString('fa-IR');
     if (type === 'installment' && !document.getElementById('firstInstallmentDate').value) {
         document.getElementById('firstInstallmentDate').value = addJalaliMonths(today, 1);
@@ -124,7 +412,6 @@ function togglePaymentFields() {
     calcInstallmentAmounts();
 }
 
-// محاسبه خودکار و زنده اقساط فاکتور جاری
 function calcInstallmentAmounts() {
     let total = 0;
     cart.forEach(item => total += item.total);
@@ -141,6 +428,26 @@ function calcInstallmentAmounts() {
     }
     const perInst = Math.round(remaining / count);
     displayEl.value = perInst.toLocaleString() + ' ریال';
+}
+
+function calculateLivePrice() {
+    const pid = document.getElementById('selectedProductId').value;
+    const amt = parseFloat(document.getElementById('saleMeters').value);
+    const per = parseFloat(document.getElementById('salePercent').value) || 0;
+    const liveEl = document.getElementById('liveFinalPrice');
+
+    if (!liveEl) return;
+
+    if (pid && amt) {
+        const p = products.find(x => x.id == pid);
+        if (p) {
+            let t = p.sellPrice * amt;
+            t += (t * (per / 100));
+            liveEl.innerText = Math.round(t).toLocaleString() + ' ریال';
+        }
+    } else {
+        liveEl.innerText = '0 ریال';
+    }
 }
 
 function addToCart() {
@@ -231,7 +538,6 @@ function checkout() {
         }
     });
 
-    // پیاده‌سازی متغیرهای تسویه
     let checks = [];
     let installments = [];
     let downPaymentVal = 0;
@@ -248,7 +554,7 @@ function checkout() {
             number: num,
             dueDate: date,
             amount: totalAmount,
-            status: 'pending' // pending, passed, bounced
+            status: 'pending'
         });
         remainingBalance = totalAmount;
     } else if (paymentType === 'installment') {
@@ -271,7 +577,7 @@ function checkout() {
         }
         remainingBalance = remaining;
     } else {
-        remainingBalance = 0; // نقدی تسویه کامل
+        remainingBalance = 0;
     }
 
     const transaction = {
@@ -301,7 +607,6 @@ function checkout() {
     cart = [];
     renderCart();
 
-    // بازنشانی فرم‌های تسویه و اطلاعات خریدار
     document.getElementById('custName').value = '';
     document.getElementById('custPhone').value = '';
     document.getElementById('paymentType').value = 'cash';
@@ -317,7 +622,6 @@ function checkout() {
     alert('فاکتور ثبت شد.');
 }
 
-// تغییر هوشمند واحد کالا متناسب با دسته‌بندی انتخابی
 function onCategoryChange() {
     const cat = document.getElementById('prodCategory').value;
     const unitSelect = document.getElementById('prodUnit');
@@ -328,29 +632,8 @@ function onCategoryChange() {
     }
 }
 
-// محاسبه قیمت لحظه‌ای در فرم فروش (ایمن شده در صورت نبود المنت)
-function calculateLivePrice() {
-    const pid = document.getElementById('selectedProductId').value;
-    const amt = parseFloat(document.getElementById('saleMeters').value);
-    const per = parseFloat(document.getElementById('salePercent').value) || 0;
-    const liveEl = document.getElementById('liveFinalPrice');
-
-    if (!liveEl) return;
-
-    if (pid && amt) {
-        const p = products.find(x => x.id == pid);
-        if (p) {
-            let t = p.sellPrice * amt;
-            t += (t * (per / 100));
-            liveEl.innerText = Math.round(t).toLocaleString() + ' ریال';
-        }
-    } else {
-        liveEl.innerText = '0 ریال';
-    }
-}
-
 // ==========================================
-// 4. مدیریت انبار و محصولات
+// مدیریت انبار و محصولات
 // ==========================================
 function addProduct() {
     const name = document.getElementById('prodName').value.trim();
@@ -389,7 +672,6 @@ function addProduct() {
     populateCustomSelect();
     updateDashboard();
 
-    // خالی کردن فرم و تمرکز بر روی فیلد اول
     document.getElementById('prodName').value = '';
     document.getElementById('prodCategory').value = 'carpet';
     document.getElementById('prodUnit').value = 'meter';
@@ -444,7 +726,7 @@ function setupEnterNavigation() {
 }
 
 // ==========================================
-// 5. داشبورد و حسابداری
+// داشبورد و حسابداری تعهدی
 // ==========================================
 function updateDashboard() {
     document.getElementById('totalItemsDisplay').innerText = products.length;
@@ -496,15 +778,8 @@ function searchTransactions(q) {
     renderTransactionsTable(filtered);
 }
 
-function searchAccounting(q) {
-    if (!q) return renderAccountingTable(transactions);
-    const lower = q.toLowerCase();
-    const filtered = transactions.filter(t => (t.customerName && t.customerName.toLowerCase().includes(lower)));
-    renderAccountingTable(filtered);
-}
-
 // ==========================================
-// 6. ابزارهای کمکی و بارکد
+// ابزارهای بارکد و کمکی
 // ==========================================
 function generateBarcodeValue() { let code; do { code = Math.floor(10000000 + Math.random() * 90000000).toString(); } while (products.some(p => p.barcode === code)); return code; }
 
@@ -580,15 +855,49 @@ function calculateInventoryStats() {
     document.getElementById('totalStockPieces').innerText = p + ' عدد';
 }
 
-// ==========================================
-// 7. ذخیره/بازیابی و سطل زباله
-// ==========================================
-function saveData() { localStorage.setItem('cm_products_v5', JSON.stringify(products)); localStorage.setItem('cm_transactions_v5', JSON.stringify(transactions)); localStorage.setItem('cm_returns_v5', JSON.stringify(returns)); localStorage.setItem('cm_deleted_p_v5', JSON.stringify(deletedProducts)); localStorage.setItem('cm_deleted_t_v5', JSON.stringify(deletedTransactions)); }
-function loadData() { if (localStorage.getItem('cm_products_v5')) products = JSON.parse(localStorage.getItem('cm_products_v5')); if (localStorage.getItem('cm_transactions_v5')) transactions = JSON.parse(localStorage.getItem('cm_transactions_v5')); if (localStorage.getItem('cm_returns_v5')) returns = JSON.parse(localStorage.getItem('cm_returns_v5')); if (localStorage.getItem('cm_deleted_p_v5')) deletedProducts = JSON.parse(localStorage.getItem('cm_deleted_p_v5')); if (localStorage.getItem('cm_deleted_t_v5')) deletedTransactions = JSON.parse(localStorage.getItem('cm_deleted_t_v5')); }
-function cleanupTrash() { const l = Date.now() - (30 * 24 * 3600 * 1000); deletedProducts = deletedProducts.filter(i => i.deletedAt > l); deletedTransactions = deletedTransactions.filter(i => i.deletedAt > l); saveData(); }
+function searchAccounting(q) {
+    if (!q) return renderAccountingTable(transactions);
+    const lower = q.toLowerCase();
+    const filtered = transactions.filter(t => (t.customerName && t.customerName.toLowerCase().includes(lower)));
+    renderAccountingTable(filtered);
+}
 
-window.deleteProduct = function (id) { if (!confirm('حذف؟')) return; const i = products.findIndex(p => p.id === id); if (i > -1) { products[i].deletedAt = Date.now(); deletedProducts.push(products[i]); products.splice(i, 1); saveData(); location.reload(); } };
-window.delTrans = function (id) { if (!confirm('حذف فاکتور؟')) return; const i = transactions.findIndex(t => t.id === id); if (i > -1) { transactions[i].deletedAt = Date.now(); deletedTransactions.push(transactions[i]); transactions.splice(i, 1); saveData(); updateDashboard(); updateAccounting(); renderTrash(); renderAccounts(); } };
+// ==========================================
+// مدیریت سطل زباله و بازیابی
+// ==========================================
+function cleanupTrash() {
+    const l = Date.now() - (30 * 24 * 3600 * 1000);
+    deletedProducts = deletedProducts.filter(i => i.deletedAt > l);
+    deletedTransactions = deletedTransactions.filter(i => i.deletedAt > l);
+    saveData();
+}
+
+function deleteProduct(id) {
+    if (!confirm('حذف؟')) return;
+    const i = products.findIndex(p => p.id === id);
+    if (i > -1) {
+        products[i].deletedAt = Date.now();
+        deletedProducts.push(products[i]);
+        products.splice(i, 1);
+        saveData();
+        location.reload();
+    }
+}
+
+function delTrans(id) {
+    if (!confirm('حذف فاکتور؟')) return;
+    const i = transactions.findIndex(t => t.id === id);
+    if (i > -1) {
+        transactions[i].deletedAt = Date.now();
+        deletedTransactions.push(transactions[i]);
+        transactions.splice(i, 1);
+        saveData();
+        updateDashboard();
+        updateAccounting();
+        renderTrash();
+        renderAccounts();
+    }
+}
 
 function renderTrash() {
     const pBody = document.getElementById('trashProductsBody');
@@ -620,13 +929,12 @@ function renderTrash() {
     });
 }
 
-window.restoreProduct = function (id) { const i = deletedProducts.findIndex(p => p.id === id); if (i > -1) { delete deletedProducts[i].deletedAt; products.push(deletedProducts[i]); deletedProducts.splice(i, 1); saveData(); location.reload(); } };
-window.restoreTrans = function (id) { const i = deletedTransactions.findIndex(t => t.id === id); if (i > -1) { delete deletedTransactions[i].deletedAt; transactions.push(deletedTransactions[i]); deletedTransactions.splice(i, 1); saveData(); location.reload(); } };
+function restoreProduct(id) { const i = deletedProducts.findIndex(p => p.id === id); if (i > -1) { delete deletedProducts[i].deletedAt; products.push(deletedProducts[i]); deletedProducts.splice(i, 1); saveData(); location.reload(); } }
+function restoreTrans(id) { const i = deletedTransactions.findIndex(t => t.id === id); if (i > -1) { delete deletedTransactions[i].deletedAt; transactions.push(deletedTransactions[i]); deletedTransactions.splice(i, 1); saveData(); location.reload(); } }
 
 // ==========================================
-// 8. حسابداری تعهدی (چک و اقساط)
+// حسابداری تعهدی (چک و اقساط)
 // ==========================================
-
 function switchAccountTab(tabId) {
     document.querySelectorAll('.account-tab-content').forEach(el => el.style.display = 'none');
     document.getElementById(tabId).style.display = 'block';
@@ -651,11 +959,12 @@ function renderAccounts() {
     const checksBody = document.getElementById('checksTableBody');
     const accountsBody = document.getElementById('accountsTableBody');
 
+    if (!checksBody || !accountsBody) return;
+
     checksBody.innerHTML = '';
     accountsBody.innerHTML = '';
 
     transactions.forEach(t => {
-        // ۱. محاسبات چک‌ها
         if (t.checks && Array.isArray(t.checks)) {
             t.checks.forEach(c => {
                 if (c.status === 'pending') {
@@ -686,7 +995,6 @@ function renderAccounts() {
             });
         }
 
-        // ۲. محاسبات اقساط
         if (t.installments && Array.isArray(t.installments)) {
             let paidCount = 0;
             let unpaidSum = 0;
@@ -786,16 +1094,16 @@ function payInstallment(transId, instNumber) {
 
             saveData();
             renderAccounts();
-            openInstallmentDetails(transId); // بروزرسانی زنده مودال باز شده
+            openInstallmentDetails(transId);
             updateAccounting();
         }
     }
 }
 
 // ==========================================
-// 9. مودال‌ها و جزئیات ویرایش محصولات
+// مودال‌ها و جزئیات ویرایش محصولات
 // ==========================================
-window.calcEditPrice = function () {
+function calcEditPrice() {
     const buyInput = document.getElementById('editProdBuy');
     const percentInput = document.getElementById('editProdPercent');
     const sellInput = document.getElementById('editProdSell');
@@ -807,9 +1115,9 @@ window.calcEditPrice = function () {
         const sellPrice = buyPrice + (buyPrice * (percent / 100));
         sellInput.value = Math.round(sellPrice).toLocaleString();
     }
-};
+}
 
-window.openEditModal = function (id) {
+function openEditModal(id) {
     const p = products.find(x => x.id === id);
     if (!p) return;
 
@@ -827,9 +1135,9 @@ window.openEditModal = function (id) {
     document.getElementById('editProdPercent').value = p.percent || 0;
 
     document.getElementById('editModal').style.display = 'flex';
-};
+}
 
-window.saveEditProduct = function () {
+function saveEditProduct() {
     const id = parseInt(document.getElementById('editProdId').value);
     const p = products.find(x => x.id === id);
 
@@ -852,33 +1160,33 @@ window.saveEditProduct = function () {
         populateCustomSelect();
         closeModal('editModal');
     }
-};
+}
 
 function openReturnModal(id) { document.getElementById('returnTransId').value = id; document.getElementById('returnReason').value = ''; document.getElementById('returnModal').style.display = 'flex'; }
 function confirmReturn() { const id = parseInt(document.getElementById('returnTransId').value); const r = document.getElementById('returnReason').value; if (!r) return alert('دلیل؟'); const idx = transactions.findIndex(t => t.id === id); if (idx > -1) { const t = transactions[idx]; if (t.items) { t.items.forEach(it => { const p = products.find(x => x.id == it.productId); if (p) p.stock += it.amount; }); } else { const p = products.find(x => x.id == t.productId); if (p) p.stock += t.amount; } returns.unshift({ ...t, returnDate: new Date().toLocaleDateString('fa-IR'), returnReason: r }); transactions.splice(idx, 1); saveData(); updateDashboard(); updateAccounting(); renderInventoryTable(); calculateInventoryStats(); renderReturnsTable(); renderAccounts(); closeModal('returnModal'); alert('مرجوع شد'); } }
 
-function renderReturnsTable() { const t = document.getElementById('returnsTableBody'); t.innerHTML = ''; returns.forEach(r => { t.innerHTML += `<tr><td>${r.items ? r.items.length + ' قلم' : r.productName}</td><td style="color:#c0392b">${r.amount || '-'}</td><td>${r.totalPrice.toLocaleString()}</td><td>${r.returnDate}</td><td>${r.returnReason}</td></tr>` }); }
+function renderReturnsTable() { const t = document.getElementById('returnsTableBody'); if (t) { t.innerHTML = ''; returns.forEach(r => { t.innerHTML += `<tr><td>${r.items ? r.items.length + ' قلم' : r.productName}</td><td style="color:#c0392b">${r.amount || '-'}</td><td>${r.totalPrice.toLocaleString()}</td><td>${r.returnDate}</td><td>${r.returnReason}</td></tr>` }); } }
 function showSection(id) { document.querySelectorAll('.section').forEach(s => s.classList.remove('active-section')); document.querySelectorAll('.sidebar nav button').forEach(b => b.classList.remove('active')); document.getElementById(id).classList.add('active-section'); const btn = document.getElementById('btn-' + id); if (btn) btn.classList.add('active'); }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 function exportData() { const d = { products, transactions, returns, deletedProducts, deletedTransactions }; const b = new Blob([JSON.stringify(d)], { type: "application/json" }); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = "backup.json"; document.body.appendChild(a); a.click(); document.body.removeChild(a); }
 function importData(i) { const f = i.files[0]; if (!f) return; const r = new FileReader(); r.onload = e => { try { const d = JSON.parse(e.target.result); if (confirm('بازنشانی؟')) { products = d.products || []; transactions = d.transactions || []; returns = d.returns || []; deletedProducts = d.deletedProducts || []; deletedTransactions = d.deletedTransactions || []; saveData(); location.reload(); } } catch (z) { alert('خطا'); } }; r.readAsText(f); i.value = ''; }
 
-window.permDelTrans = function (id) {
+function permDelTrans(id) {
     if (confirm('آیا مطمئن هستید؟ این فاکتور برای همیشه پاک می‌شود!')) {
         deletedTransactions = deletedTransactions.filter(t => t.id !== id);
         saveData();
         renderTrash();
     }
-};
+}
 
-window.permDelProd = function (id) {
+function permDelProd(id) {
     if (confirm('آیا مطمئن هستید؟ این کالا برای همیشه پاک می‌شود!')) {
         deletedProducts = deletedProducts.filter(p => p.id !== id);
         saveData();
         renderTrash();
     }
-};
+}
 
 function autoCalcSell(prefix) {
     const buyInput = document.getElementById(prefix + 'BuyPrice');
