@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مدیریت فرش | نسخه اصلاح شده نهایی</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+
+
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo">
+                <svg class="icon-lg" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" />
+                </svg>
+                <h2>مدیریت هوشمند</h2>
+            </div>
+            <nav>
+                <button id="btn-dashboard" onclick="showSection('dashboard')" class="active">داشبورد (فاکتورها)</button>
+                <button id="btn-sales" onclick="showSection('sales')">فروش کالا</button>
+                <button id="btn-inventory" onclick="showSection('inventory')">مدیریت انبار</button>
+                <button id="btn-accounting" onclick="showSection('accounting')">حسابداری</button>
+                <button id="btn-returns" onclick="showSection('returns')">مرجوعی‌ها</button>
+                <button id="btn-trash" onclick="showSection('trash')">سطل زباله</button>
+                <div class="backup-section">
+                    <button onclick="exportData()" class="btn-backup">دانلود پشتیبان</button>
+                    <button onclick="document.getElementById('fileInput').click()"
+                        class="btn-restore">بازگردانی</button>
+                    <input type="file" id="fileInput" style="display: none" onchange="importData(this)">
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+
+            <!-- داشبورد -->
+            <section id="dashboard" class="section active-section">
+                <header>
+                    <h1>داشبورد و فاکتورها</h1><span class="date-display" id="currentDate"></span>
+                </header>
+                <div class="stats-grid">
+                    <div class="card stock-count">
+                        <h3>تنوع محصولات</h3>
+                        <p id="totalItemsDisplay">0</p>
+                    </div>
+                    <div class="card" style="border-right-color: #ef4444;">
+                        <h3>کالاهای رو به اتمام</h3>
+                        <p id="lowStockDisplay" style="color:#ef4444">0</p>
+                    </div>
+                    <div class="card" style="border-right-color: #3b82f6;">
+                        <h3>تعداد فاکتورها</h3>
+                        <p id="totalTransactionsCount">0</p>
+                    </div>
+                </div>
+                <div class="dashboard-search"><input type="text" placeholder="جستجو در فاکتورها..."
+                        oninput="searchTransactions(this.value)"></div>
+                <div class="recent-transactions">
+                    <h3>لیست فاکتورها</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>شماره</th>
+                                <th>مشتری</th>
+                                <th>مبلغ کل</th>
+                                <th>تاریخ</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- فروش -->
+            <section id="sales" class="section">
+                <header>
+                    <h1>صندوق فروش</h1>
+                </header>
+                <div class="sales-wrapper">
+                    <div class="grid-form" style="display:flex; gap:10px; margin-bottom:15px;">
+                        <div class="form-group" style="flex:1"><label>نام مشتری:</label><input type="text" id="custName"
+                                placeholder="نام خریدار"></div>
+                        <div class="form-group" style="flex:1"><label>تلفن:</label><input type="text" id="custPhone"
+                                placeholder="09xxxxxxxxx"></div>
+                    </div>
+                    <div class="scan-container"><input type="text" id="barcodeScanner"
+                            placeholder="بارکد را اینجا اسکن کنید..." onkeypress="handleBarcodeScan(event)"></div>
+                    <div class="grid-form" style="display: flex; gap: 10px; align-items: flex-end;">
+                        <div class="form-group" style="flex:3">
+                            <label>انتخاب کالا:</label>
+                            <div class="custom-select-wrapper" onclick="toggleDropdown()">
+                                <div class="select-display"><input type="text" id="productSearchInput"
+                                        placeholder="جستجو..." oninput="filterDropdown(this.value)" autocomplete="off">
+                                </div>
+                                <div class="select-options" id="dropdownList"></div>
+                            </div>
+                            <input type="hidden" id="selectedProductId">
+                        </div>
+                        <div class="form-group" style="flex:1"><label>مقدار:</label><input type="number" id="saleMeters"
+                                placeholder="0"></div>
+                        <div class="form-group" style="flex:1"><label>تغییر %:</label><input type="number"
+                                id="salePercent" value="0"></div>
+                        <div class="form-group" style="flex:0.5"><button class="btn-primary" onclick="addToCart()"
+                                style="height:42px;">+</button></div>
+                    </div>
+                    <div class="info-row"><span id="unitPriceLabel">قیمت: -</span><span id="stockLabel">موجودی: -</span>
+                    </div>
+                    <div class="cart-section">
+                        <table class="cart-table">
+                            <thead>
+                                <tr>
+                                    <th>کالا</th>
+                                    <th>مقدار</th>
+                                    <th>فی نهایی</th>
+                                    <th>کل</th>
+                                    <th>حذف</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cartTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="price-box"><span>جمع کل:</span>
+                        <h2 id="cartTotalDisplay">0 ریال</h2>
+                    </div>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn-danger" onclick="clearCart()" style="flex:1">پاک کردن</button>
+                        <button class="btn-secondary" onclick="checkout()" style="flex:2; font-size:18px;">ثبت نهایی
+                            ✅</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- انبار (همان تک ردیفه که خواستی) -->
+            <section id="inventory" class="section">
+                <header>
+                    <h1>مدیریت محصولات</h1>
+                </header>
+                <div class="inventory-stats-row">
+                    <div class="inventory-summary-box dark">
+                        <div class="text-area"><span>موجودی متری</span>
+                            <h2 id="totalStockMeters">0 متر</h2>
+                        </div>
+                    </div>
+                    <div class="inventory-summary-box dark">
+                        <div class="text-area"><span>موجودی عددی</span>
+                            <h2 id="totalStockPieces">0 عدد</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="inventory-form" id="addProductForm">
+                    <h3>افزودن کالا (Enter بزنید)</h3>
+                    <!-- فایل index.html -> داخل inventory-form -->
+                    <div class="grid-single-row">
+                        <input type="text" id="prodName" class="form-input" placeholder="نام محصول">
+                        <select id="prodUnit" class="form-input" style="min-width:70px">
+                            <option value="piece">عدد</option>
+                            <option value="meter">واحد: متر</option>
+                        </select>
+                        <input type="text" id="prodBrand" class="form-input" placeholder="برند">
+                        <input type="number" id="prodStock" class="form-input" placeholder="موجودی">
+
+                        <!-- قیمت خرید: وقتی تغییر کرد محاسبه انجام شود -->
+                        <input type="text" id="prodBuyPrice" class="form-input" placeholder="خرید (ریال)"
+                            onkeyup="formatCurrency(this)" oninput="autoCalcSell('prod')">
+
+                        <!-- فیلد جدید درصد -->
+                        <input type="number" id="prodPercent" class="form-input" placeholder="سود %"
+                            oninput="autoCalcSell('prod')" style="text-align:center; background:#fffbe6">
+
+                        <!-- قیمت فروش: اگر دستی تغییر دادید، درصد پاک شود -->
+                        <input type="text" id="prodSellPrice" class="form-input" placeholder="فروش (ریال)"
+                            onkeyup="formatCurrency(this)" oninput="document.getElementById('prodPercent').value=''">
+                    </div>
+                    <button id="btnAddProduct" class="btn-secondary" onclick="addProduct()"
+                        style="margin-top:10px; width:100%">ذخیره و تولید بارکد</button>
+                </div>
+                <div class="inventory-list">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>بارکد</th>
+                                <th>نام کالا</th>
+                                <th>موجودی</th>
+                                <th>قیمت فروش</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventoryTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- حسابداری، سطل زباله، مرجوعی (بدون تغییر) -->
+            <section id="accounting" class="section">
+                <header>
+                    <h1>حسابداری</h1>
+                </header>
+                <div class="stats-grid">
+                    <div class="card total-sales">
+                        <h3>فروش کل</h3>
+                        <p id="totalSalesDisplay">0</p>
+                    </div>
+                    <div class="card total-profit">
+                        <h3>سود خالص</h3>
+                        <p id="totalProfitDisplay">0</p>
+                    </div>
+                </div>
+                <div class="inventory-summary-box" style="margin-bottom:20px">
+                    <div class="text-area"><span>ارزش کل انبار</span>
+                        <h2 id="totalInventoryValue">0</h2>
+                    </div>
+                </div>
+                <div class="dashboard-search"><input type="text" placeholder="جستجو..."
+                        oninput="searchAccounting(this.value)"></div>
+                <div class="recent-transactions">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>مشتری</th>
+                                <th>مبلغ کل</th>
+                                <th>سود</th>
+                                <th>تاریخ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="accountingTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+            <section id="trash" class="section">
+                <header>
+                    <h1>سطل زباله</h1>
+                </header>
+
+                <h3 style="margin-top:20px; color:#c0392b">کالاهای حذف شده</h3>
+                <div class="inventory-list">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>نام کالا</th>
+                                <th>تاریخ حذف</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trashProductsBody"></tbody>
+                    </table>
+                </div>
+
+                <h3 style="margin-top:30px; color:#c0392b">فاکتورهای حذف شده</h3>
+                <div class="inventory-list">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>مشتری</th>
+                                <th>مبلغ کل</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trashTransactionsBody"></tbody>
+                    </table>
+                </div>
+            </section>
+            <section id="returns" class="section">
+                <header>
+                    <h1>مرجوعی‌ها</h1>
+                </header>
+                <div class="inventory-list">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>فاکتور</th>
+                                <th>دلیل</th>
+                                <th>مبلغ</th>
+                                <th>تاریخ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="returnsTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- چاپ -->
+    <div id="printArea"></div>
+
+    <!-- مودال ویرایش (اصلاح شده: استایل استاندارد و مرتب) -->
+    <!-- مودال ویرایش (اصلاح شده و دقیق) -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal('editModal')">&times;</span>
+            <h2>ویرایش محصول</h2>
+            <input type="hidden" id="editProdId">
+
+            <div class="form-group" style="margin-bottom:15px">
+                <label>بارکد (غیرقابل تغییر):</label>
+                <input type="text" id="editProdBarcode" disabled
+                    style="background:#f0f0f0; text-align:center; font-weight:bold; letter-spacing:2px">
+            </div>
+
+            <div class="grid-form" style="grid-template-columns: 1fr 1fr; gap:10px">
+                <div class="form-group"><label>نام:</label><input type="text" id="editProdName"></div>
+                <div class="form-group"><label>واحد:</label><select id="editProdUnit">
+                        <option value="meter">متر</option>
+                        <option value="piece">عدد</option>
+                    </select></div>
+                <div class="form-group"><label>برند:</label><input type="text" id="editProdBrand"></div>
+                <div class="form-group"><label>موجودی:</label><input type="number" id="editProdStock"></div>
+            </div>
+
+            <!-- بخش قیمت‌ها و درصد (با آی‌دی‌های دقیق) -->
+            <div class="grid-form" style="grid-template-columns: 1fr 0.6fr 1fr; gap:10px; align-items:end">
+                <div class="form-group">
+                    <label>خرید (ریال):</label>
+                    <!-- وقتی خرید تغییر کرد، فروش هم آپدیت شود -->
+                    <input type="text" id="editProdBuy" onkeyup="formatCurrency(this)" oninput="calcEditPrice()">
+                </div>
+
+                <div class="form-group">
+                    <label>سود %:</label>
+                    <!-- وقتی درصد تغییر کرد، فروش آپدیت شود -->
+                    <input type="number" id="editProdPercent" oninput="calcEditPrice()"
+                        style="text-align:center; background:#fffbe6">
+                </div>
+
+                <div class="form-group">
+                    <label>فروش (ریال):</label>
+                    <!-- وقتی فروش دستی تغییر کرد، درصد پاک شود -->
+                    <input type="text" id="editProdSell" onkeyup="formatCurrency(this)"
+                        oninput="document.getElementById('editProdPercent').value=''">
+                </div>
+            </div>
+
+            <button class="btn-primary" onclick="saveEditProduct()" style="width:100%; margin-top:10px">ذخیره
+                تغییرات</button>
+        </div>
+    </div>
+
+    <div id="returnModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal('returnModal')">&times;</span>
+            <h2>ثبت مرجوعی</h2>
+            <input type="hidden" id="returnTransId">
+            <div class="form-group"><label>دلیل:</label><textarea id="returnReason" rows="3"></textarea></div>
+            <button class="btn-danger" onclick="confirmReturn()" style="width:100%">تایید</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
