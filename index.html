@@ -26,6 +26,7 @@
                 <button id="btn-inventory" onclick="showSection('inventory')">مدیریت انبار</button>
                 <button id="btn-accounting" onclick="showSection('accounting')">حسابداری</button>
                 <button id="btn-returns" onclick="showSection('returns')">مرجوعی‌ها</button>
+                <button id="btn-accounts" onclick="showSection('accounts')">چک و اقساط 💳</button>
                 <button id="btn-trash" onclick="showSection('trash')">سطل زباله</button>
                 <div class="backup-section">
                     <button onclick="exportData()" class="btn-backup">دانلود پشتیبان</button>
@@ -126,6 +127,64 @@
                     </div>
                     <div class="price-box"><span>جمع کل:</span>
                         <h2 id="cartTotalDisplay">0 ریال</h2>
+                    </div>
+                    <!-- پنل انتخاب نوع پرداخت و تسویه حساب فاکتور -->
+                    <div class="settlement-section"
+                        style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-top: 20px; border: 1px solid #e2e8f0; text-align: right;">
+                        <h3 style="margin-bottom: 15px; font-size: 16px; color: var(--text-main);">روش پرداخت و تسویه
+                        </h3>
+                        <div class="grid-form" style="grid-template-columns: 1fr 1fr; gap:15px; margin-bottom: 15px;">
+                            <div class="form-group">
+                                <label>نوع تسویه:</label>
+                                <select id="paymentType" onchange="togglePaymentFields()">
+                                    <option value="cash">نقدی (تسویه کامل)</option>
+                                    <option value="check">چکی</option>
+                                    <option value="installment">اقساطی</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="downPaymentGroup" style="display: none;">
+                                <label>مبلغ پیش‌پرداخت (ریال):</label>
+                                <input type="text" id="downPayment" placeholder="0"
+                                    onkeyup="formatCurrency(this); calcInstallmentAmounts();">
+                            </div>
+                        </div>
+
+                        <!-- فیلدهای چکی -->
+                        <div id="checkFields"
+                            style="display: none; border-top: 1px dashed #cbd5e1; padding-top: 15px; margin-top: 15px;">
+                            <h4 style="margin-bottom: 10px; font-size: 14px; color: var(--primary);">اطلاعات چک</h4>
+                            <div class="grid-form" style="grid-template-columns: 1fr 1fr 1fr; gap:10px;">
+                                <div class="form-group"><label>بانک صادرکننده:</label><input type="text" id="checkBank"
+                                        placeholder="مثلا ملی"></div>
+                                <div class="form-group"><label>شماره صیاد / چک:</label><input type="text"
+                                        id="checkNumber" placeholder="123456"></div>
+                                <div class="form-group"><label>تاریخ سررسید چک:</label><input type="text"
+                                        id="checkDueDate" placeholder="1405/04/01"></div>
+                            </div>
+                        </div>
+
+                        <!-- فیلدهای اقساطی -->
+                        <div id="installmentFields"
+                            style="display: none; border-top: 1px dashed #cbd5e1; padding-top: 15px; margin-top: 15px;">
+                            <h4 style="margin-bottom: 10px; font-size: 14px; color: var(--primary);">تنظیم دفترچه اقساط
+                            </h4>
+                            <div class="grid-form" style="grid-template-columns: 1fr 1.2fr 1fr; gap:10px;">
+                                <div class="form-group">
+                                    <label>تعداد اقساط:</label>
+                                    <input type="number" id="installmentCount" value="6" min="1"
+                                        oninput="calcInstallmentAmounts()">
+                                </div>
+                                <div class="form-group">
+                                    <label>تاریخ اولین قسط:</label>
+                                    <input type="text" id="firstInstallmentDate" placeholder="1405/04/01">
+                                </div>
+                                <div class="form-group">
+                                    <label>مبلغ هر قسط (ریال):</label>
+                                    <input type="text" id="installmentAmountDisplay" readonly
+                                        style="background: #f1f5f9; font-weight: bold; text-align: center; color: var(--success)">
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div style="display:flex; gap:10px;">
                         <button class="btn-danger" onclick="clearCart()" style="flex:1">پاک کردن</button>
@@ -292,6 +351,74 @@
                     </table>
                 </div>
             </section>
+            <!-- بخش حسابداری چک و اقساط مشتریان -->
+            <section id="accounts" class="section">
+                <header>
+                    <h1>مدیریت چک‌ها و دفترچه اقساط</h1>
+                </header>
+
+                <div class="stats-grid" style="margin-top: 20px;">
+                    <div class="card" style="border-right-color: #f59e0b;">
+                        <h3>چک‌های وصول نشده</h3>
+                        <p id="totalPendingChecks">0 ریال</p>
+                    </div>
+                    <div class="card" style="border-right-color: #3b82f6;">
+                        <h3>اقساط معوقه (دریافت نشده)</h3>
+                        <p id="totalPendingInstallments">0 ریال</p>
+                    </div>
+                    <div class="card" style="border-right-color: #10b981;">
+                        <h3>کل وصولی غیرنقدی</h3>
+                        <p id="totalCollectedNonCash">0 ریال</p>
+                    </div>
+                </div>
+
+                <div class="tab-container" style="display: flex; gap: 10px; margin-bottom: 20px; margin-top: 20px;">
+                    <button class="btn-primary" onclick="switchAccountTab('checksTab')" id="btnChecksTab"
+                        style="width: auto; background-color: var(--primary);">مدیریت چک‌ها 🏦</button>
+                    <button class="btn-secondary" onclick="switchAccountTab('installmentsTab')" id="btnInstallmentsTab"
+                        style="width: auto; background-color: #475569;">دفترچه اقساط مشتریان 📅</button>
+                </div>
+
+                <!-- تب چک‌ها -->
+                <div id="checksTab" class="account-tab-content">
+                    <div class="inventory-list">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>مشتری</th>
+                                    <th>بانک</th>
+                                    <th>شماره چک</th>
+                                    <th>تاریخ سررسید</th>
+                                    <th>مبلغ چک</th>
+                                    <th>وضعیت</th>
+                                    <th>عملیات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="checksTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- تب اقساط -->
+                <div id="installmentsTab" class="account-tab-content" style="display: none;">
+                    <div class="inventory-list">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>مشتری / فاکتور</th>
+                                    <th>مبلغ کل</th>
+                                    <th>پیش‌پرداخت</th>
+                                    <th>باقی‌مانده بدهی</th>
+                                    <th>وضعیت اقساط</th>
+                                    <th>وضعیت کلی</th>
+                                    <th>عملیات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="accountsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
@@ -368,6 +495,34 @@
             <input type="hidden" id="returnTransId">
             <div class="form-group"><label>دلیل:</label><textarea id="returnReason" rows="3"></textarea></div>
             <button class="btn-danger" onclick="confirmReturn()" style="width:100%">تایید</button>
+        </div>
+    </div>
+    <!-- مودال دفترچه اقساط مشتری -->
+    <div id="installmentDetailModal" class="modal">
+        <div class="modal-content" style="max-width: 600px; text-align: right;">
+            <span class="close-modal" onclick="closeModal('installmentDetailModal')">&times;</span>
+            <h2 id="instModalTitle" style="margin-bottom: 15px;">دفترچه اقساط مشتری</h2>
+            <div
+                style="margin: 15px 0; background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; font-size: 14px; line-height: 1.8;">
+                <p><strong>نام مشتری:</strong> <span id="instModalCustomer">-</span></p>
+                <p><strong>بدهی اولیه:</strong> <span id="instModalTotalDebt">0</span> | <strong>باقی‌مانده
+                        فعلی:</strong> <span id="instModalRemaining"
+                        style="color: var(--danger); font-weight: bold;">0</span></p>
+            </div>
+            <div class="inventory-list" style="max-height: 300px; overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>قسط</th>
+                            <th>تاریخ سررسید</th>
+                            <th>مبلغ قسط</th>
+                            <th>وضعیت</th>
+                            <th>عملیات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="instDetailTableBody"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 

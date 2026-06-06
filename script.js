@@ -1,5 +1,5 @@
 /**
- * Carpet Manager System - Unified Version (Appliance & Category Update)
+ * Carpet Manager System - Installment & Check Fully Integrated Edition
  */
 
 // --- متغیرهای سراسری ---
@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     populateCustomSelect();
     calculateInventoryStats();
     setupEnterNavigation();
+    renderAccounts(); // رندر بخش اقساط و چک‌ها
 
     // 4. تاریخ
     const options = { year: 'numeric', month: 'long', day: 'numeric' };
@@ -67,174 +68,81 @@ function checkLogin() {
 }
 
 // ==========================================
-// 2. چاپ (لیبل و فاکتور نهایی)
+// 2. تابع محاسباتی تاریخ شمسی (افزودن ماه بدون نیاز به لایبرری خارجی)
 // ==========================================
+function addJalaliMonths(dateStr, monthsToAdd) {
+    const parts = dateStr.split('/');
+    if (parts.length !== 3) return dateStr;
+    let y = parseInt(parts[0]);
+    let m = parseInt(parts[1]);
+    let d = parseInt(parts[2]);
 
-// چاپ لیبل کالا با تزریق گرافیکی بارکد اصلاح شده
-function printLabel(id) {
-    const product = products.find(p => p.id === id);
-    if (!product) return;
-
-    const barcodeSVG = createBarcodeSVG(product.barcode);
-    const printArea = document.getElementById('printArea');
-    printArea.className = 'label-mode';
-
-    printArea.innerHTML = `
-        <div class="label-container">
-            <div class="label-name">${product.name}</div>
-            <div class="label-brand">${product.brand || ''}</div>
-            <div class="dashed-line"></div>
-            <div class="label-price">${product.sellPrice.toLocaleString()}</div>
-            <div class="label-unit">ریال</div>
-            <div class="dashed-line"></div>
-            <div class="label-name">موجودی : ${product.stock}</div>
-            <div class="barcode-wrapper" style="width:100%; height:60px; margin: 10px 0;">
-                ${barcodeSVG}
-            </div>
-            <div class="label-brand">${product.barcode}</div>
-        </div>
-    `;
-
-    window.print();
-    setTimeout(() => { printArea.innerHTML = ''; printArea.className = ''; }, 1000);
-}
-
-// چاپ فاکتور فروش (با اطلاعات دقیق و سایز جمع‌وجور)
-function printInvoice(transId) {
-    const transaction = transactions.find(t => t.id === transId);
-    if (!transaction) return;
-
-    const printArea = document.getElementById('printArea');
-    printArea.className = 'invoice-mode';
-
-    // ساخت ردیف‌های جدول فاکتور
-    let itemsHtml = '';
-    if (transaction.items && Array.isArray(transaction.items)) {
-        transaction.items.forEach(item => {
-            let unitPrice = item.total / item.amount;
-            itemsHtml += `
-                <tr>
-                    <td class="col-name">${item.productName}</td>
-                    <td class="col-qty">${item.amount}</td>
-                    <td class="col-price">${Math.round(unitPrice).toLocaleString()}</td>
-                    <td class="col-total">${item.total.toLocaleString()}</td>
-                </tr>
-            `;
-        });
-    } else {
-        itemsHtml += `
-            <tr>
-                <td class="col-name">${transaction.productName}</td>
-                <td class="col-qty">${transaction.amount}</td>
-                <td class="col-price">-</td>
-                <td class="col-total">${transaction.totalPrice.toLocaleString()}</td>
-            </tr>
-        `;
+    m += monthsToAdd;
+    while (m > 12) {
+        m -= 12;
+        y += 1;
     }
 
-    printArea.innerHTML = `
-        <style>
-            @media print {
-                @page { margin: 0; }
-                body { margin: 0; padding: 0; }
-            }
-            .invoice-container {
-                width: 72mm;
-                margin: 0 auto;
-                padding: 5px 2px;
-                font-family: 'Tahoma', sans-serif;
-                font-size: 10px;
-                color: black;
-                direction: rtl;
-                line-height: 1.4;
-            }
-            .inv-header {
-                text-align: center;
-                border-bottom: 2px solid #000;
-                padding-bottom: 5px;
-                margin-bottom: 5px;
-            }
-            .inv-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
-            .inv-info { font-size: 9px; font-weight: bold; margin-bottom: 2px; }
-            
-            .inv-customer-box {
-                border: 1px dashed #000;
-                border-radius: 4px;
-                padding: 5px;
-                margin-bottom: 8px;
-                font-size: 10px;
-            }
-            
-            table { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
-            th { border-bottom: 1px solid #000; padding: 2px 0; font-size: 9px; font-weight: bold; }
-            td { border-bottom: 1px dotted #444; padding: 4px 0; font-size: 9px; vertical-align: top; }
-            
-            .col-name { width: 38%; text-align: right; }
-            .col-qty { width: 12%; text-align: center; }
-            .col-price { width: 22%; text-align: center; }
-            .col-total { width: 28%; text-align: left; font-weight: bold; }
+    // تصحیح روزها بر اساس ماه‌های ۳۱ و ۳۰ روزه شمسی
+    if (m > 6 && m < 12 && d > 30) d = 30;
+    if (m === 12) {
+        // سال‌های کبیسه تقریبی شمسی
+        let isLeap = [1, 5, 9, 13, 17, 22, 26, 30].includes(y % 33);
+        if (isLeap && d > 30) d = 30;
+        if (!isLeap && d > 29) d = 29;
+    }
 
-            .inv-total-row {
-                border-top: 2px solid #000;
-                padding-top: 5px;
-                font-size: 14px;
-                font-weight: 900;
-                text-align: center;
-                margin-top: 5px;
-            }
-            .inv-footer { text-align: center; margin-top: 10px; font-size: 9px; border-top: 1px dashed #000; padding-top:5px; }
-        </style>
-
-        <div class="invoice-container">
-            <div class="inv-header">
-                <div class="inv-title">تزئینات نوین ظریف مصور</div>
-                <div class="inv-info">نمایندگی موکت ظریف مصور احمدی</div>
-                <div class="inv-info">پیج اینستاگرام : zarifmosavarmis</div>
-                <div class="inv-info">شماره تماس : 09928905769 , 09938812959</div>
-                <div class="inv-info">آدرس : پنج بنگله , بالاتر از فروشگاه رفاه جنب فروشگاه جانبو</div>
-            </div>
-
-            <div class="inv-customer-box">
-                <div><strong>مشتری:</strong> ${transaction.customerName || 'ناشناس'}</div>
-                <div style="margin-top:2px"><strong>تاریخ:</strong> ${transaction.date}</div>
-                <div style="margin-top:2px; font-size:9px">شماره فاکتور: ${Math.floor(transaction.id).toString().slice(-6)}</div>
-                <div><strong>شماره تلفن :</strong> ${transaction.custPhone || 'ناشناس'}</div>
-            </div>
-
-            <table class="invoice-table">
-                <thead>
-                    <tr>
-                        <th class="col-name">شرح</th>
-                        <th class="col-qty">تعداد</th>
-                        <th class="col-price">فی</th>
-                        <th class="col-total">کل (ریال)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${itemsHtml}
-                </tbody>
-            </table>
-
-            <div class="inv-total-row">
-                جمع کل: ${transaction.totalPrice.toLocaleString()} ریال
-            </div>
-
-            <div class="inv-footer">
-                * از خرید شما سپاسگزاریم *
-            </div>
-        </div>
-    `;
-
-    window.print();
-    setTimeout(() => {
-        printArea.innerHTML = '';
-        printArea.className = '';
-    }, 1000);
+    const mm = m < 10 ? '0' + m : m;
+    const dd = d < 10 ? '0' + d : d;
+    return `${y}/${mm}/${dd}`;
 }
 
 // ==========================================
-// 3. سبد خرید و فروش
+// 3. مدیریت صندوق فروش و محاسبات فاکتور
 // ==========================================
+
+// کنترل فیلدهای تسویه در صفحه فروش
+function togglePaymentFields() {
+    const type = document.getElementById('paymentType').value;
+    const downGroup = document.getElementById('downPaymentGroup');
+    const checkFields = document.getElementById('checkFields');
+    const instFields = document.getElementById('installmentFields');
+
+    // پیش‌فرض کردن تاریخ‌های چک و قسط اول به صورت خودکار
+    const today = new Date().toLocaleDateString('fa-IR');
+    if (type === 'installment' && !document.getElementById('firstInstallmentDate').value) {
+        document.getElementById('firstInstallmentDate').value = addJalaliMonths(today, 1);
+    }
+    if (type === 'check' && !document.getElementById('checkDueDate').value) {
+        document.getElementById('checkDueDate').value = addJalaliMonths(today, 1);
+    }
+
+    downGroup.style.display = (type === 'installment') ? 'block' : 'none';
+    checkFields.style.display = (type === 'check') ? 'block' : 'none';
+    instFields.style.display = (type === 'installment') ? 'block' : 'none';
+
+    calcInstallmentAmounts();
+}
+
+// محاسبه خودکار و زنده اقساط فاکتور جاری
+function calcInstallmentAmounts() {
+    let total = 0;
+    cart.forEach(item => total += item.total);
+    const down = getRawPrice('downPayment');
+    const count = parseInt(document.getElementById('installmentCount').value) || 1;
+
+    const remaining = total - down;
+    const displayEl = document.getElementById('installmentAmountDisplay');
+    if (!displayEl) return;
+
+    if (remaining < 0) {
+        displayEl.value = 'پیش‌پرداخت مازاد!';
+        return;
+    }
+    const perInst = Math.round(remaining / count);
+    displayEl.value = perInst.toLocaleString() + ' ریال';
+}
+
 function addToCart() {
     const pid = document.getElementById('selectedProductId').value;
     const amt = parseFloat(document.getElementById('saleMeters').value);
@@ -272,6 +180,7 @@ function addToCart() {
     document.getElementById('stockLabel').innerText = '-';
     document.getElementById('productSearchInput').focus();
 
+    calcInstallmentAmounts();
     const liveEl = document.getElementById('liveFinalPrice');
     if (liveEl) liveEl.innerText = '0 ریال';
 }
@@ -294,6 +203,7 @@ function renderCart() {
         `;
     });
     document.getElementById('cartTotalDisplay').innerText = total.toLocaleString() + ' ریال';
+    calcInstallmentAmounts();
 }
 
 function removeFromCart(index) { cart.splice(index, 1); renderCart(); }
@@ -302,6 +212,7 @@ function clearCart() { if (confirm('سبد خالی شود؟')) { cart = []; ren
 function checkout() {
     const custName = document.getElementById('custName').value.trim();
     const custPhone = document.getElementById('custPhone').value.trim();
+    const paymentType = document.getElementById('paymentType').value;
 
     if (cart.length === 0) return alert('سبد خالی است');
     if (!custName) return alert('نام مشتری الزامی است');
@@ -320,6 +231,49 @@ function checkout() {
         }
     });
 
+    // پیاده‌سازی متغیرهای تسویه
+    let checks = [];
+    let installments = [];
+    let downPaymentVal = 0;
+    let remainingBalance = totalAmount;
+
+    if (paymentType === 'check') {
+        const bank = document.getElementById('checkBank').value.trim();
+        const num = document.getElementById('checkNumber').value.trim();
+        const date = document.getElementById('checkDueDate').value.trim();
+        if (!bank || !num || !date) return alert('اطلاعات چک را کامل وارد کنید');
+        checks.push({
+            id: Date.now(),
+            bank,
+            number: num,
+            dueDate: date,
+            amount: totalAmount,
+            status: 'pending' // pending, passed, bounced
+        });
+        remainingBalance = totalAmount;
+    } else if (paymentType === 'installment') {
+        downPaymentVal = getRawPrice('downPayment');
+        if (downPaymentVal > totalAmount) return alert('مبلغ پیش‌پرداخت بزرگتر از فاکتور است');
+        const count = parseInt(document.getElementById('installmentCount').value) || 1;
+        const firstDate = document.getElementById('firstInstallmentDate').value.trim();
+        if (!firstDate) return alert('تاریخ اولین قسط را مشخص کنید');
+
+        const remaining = totalAmount - downPaymentVal;
+        const instAmount = Math.round(remaining / count);
+        for (let i = 0; i < count; i++) {
+            installments.push({
+                number: i + 1,
+                dueDate: addJalaliMonths(firstDate, i),
+                amount: instAmount,
+                status: 'unpaid',
+                payDate: null
+            });
+        }
+        remainingBalance = remaining;
+    } else {
+        remainingBalance = 0; // نقدی تسویه کامل
+    }
+
     const transaction = {
         id: Date.now(),
         customerName: custName,
@@ -327,7 +281,12 @@ function checkout() {
         items: itemsToSave,
         totalPrice: totalAmount,
         profit: totalProfit,
-        date: new Date().toLocaleDateString('fa-IR')
+        date: new Date().toLocaleDateString('fa-IR'),
+        paymentType,
+        checks,
+        installments,
+        downPayment: downPaymentVal,
+        remainingBalance
     };
 
     transactions.unshift(transaction);
@@ -337,11 +296,24 @@ function checkout() {
     updateDashboard();
     updateAccounting();
     populateCustomSelect();
+    renderAccounts();
 
     cart = [];
     renderCart();
+
+    // بازنشانی فرم‌های تسویه و اطلاعات خریدار
     document.getElementById('custName').value = '';
     document.getElementById('custPhone').value = '';
+    document.getElementById('paymentType').value = 'cash';
+    document.getElementById('downPayment').value = '';
+    document.getElementById('checkBank').value = '';
+    document.getElementById('checkNumber').value = '';
+    document.getElementById('checkDueDate').value = '';
+    document.getElementById('installmentCount').value = '6';
+    document.getElementById('firstInstallmentDate').value = '';
+    document.getElementById('installmentAmountDisplay').value = '';
+    togglePaymentFields();
+
     alert('فاکتور ثبت شد.');
 }
 
@@ -378,7 +350,7 @@ function calculateLivePrice() {
 }
 
 // ==========================================
-// 4. مدیریت انبار
+// 4. مدیریت انبار و محصولات
 // ==========================================
 function addProduct() {
     const name = document.getElementById('prodName').value.trim();
@@ -616,7 +588,7 @@ function loadData() { if (localStorage.getItem('cm_products_v5')) products = JSO
 function cleanupTrash() { const l = Date.now() - (30 * 24 * 3600 * 1000); deletedProducts = deletedProducts.filter(i => i.deletedAt > l); deletedTransactions = deletedTransactions.filter(i => i.deletedAt > l); saveData(); }
 
 window.deleteProduct = function (id) { if (!confirm('حذف؟')) return; const i = products.findIndex(p => p.id === id); if (i > -1) { products[i].deletedAt = Date.now(); deletedProducts.push(products[i]); products.splice(i, 1); saveData(); location.reload(); } };
-window.delTrans = function (id) { if (!confirm('حذف فاکتور؟')) return; const i = transactions.findIndex(t => t.id === id); if (i > -1) { transactions[i].deletedAt = Date.now(); deletedTransactions.push(transactions[i]); transactions.splice(i, 1); saveData(); updateDashboard(); updateAccounting(); renderTrash(); } };
+window.delTrans = function (id) { if (!confirm('حذف فاکتور؟')) return; const i = transactions.findIndex(t => t.id === id); if (i > -1) { transactions[i].deletedAt = Date.now(); deletedTransactions.push(transactions[i]); transactions.splice(i, 1); saveData(); updateDashboard(); updateAccounting(); renderTrash(); renderAccounts(); } };
 
 function renderTrash() {
     const pBody = document.getElementById('trashProductsBody');
@@ -652,7 +624,176 @@ window.restoreProduct = function (id) { const i = deletedProducts.findIndex(p =>
 window.restoreTrans = function (id) { const i = deletedTransactions.findIndex(t => t.id === id); if (i > -1) { delete deletedTransactions[i].deletedAt; transactions.push(deletedTransactions[i]); deletedTransactions.splice(i, 1); saveData(); location.reload(); } };
 
 // ==========================================
-// 8. مودال‌ها و جزئیات ویرایش
+// 8. حسابداری تعهدی (چک و اقساط)
+// ==========================================
+
+function switchAccountTab(tabId) {
+    document.querySelectorAll('.account-tab-content').forEach(el => el.style.display = 'none');
+    document.getElementById(tabId).style.display = 'block';
+
+    const btnChecks = document.getElementById('btnChecksTab');
+    const btnInst = document.getElementById('btnInstallmentsTab');
+
+    if (tabId === 'checksTab') {
+        btnChecks.style.backgroundColor = 'var(--primary)';
+        btnInst.style.backgroundColor = '#475569';
+    } else {
+        btnChecks.style.backgroundColor = '#475569';
+        btnInst.style.backgroundColor = 'var(--primary)';
+    }
+}
+
+function renderAccounts() {
+    let pendingChecks = 0;
+    let pendingInst = 0;
+    let collectedNonCash = 0;
+
+    const checksBody = document.getElementById('checksTableBody');
+    const accountsBody = document.getElementById('accountsTableBody');
+
+    checksBody.innerHTML = '';
+    accountsBody.innerHTML = '';
+
+    transactions.forEach(t => {
+        // ۱. محاسبات چک‌ها
+        if (t.checks && Array.isArray(t.checks)) {
+            t.checks.forEach(c => {
+                if (c.status === 'pending') {
+                    pendingChecks += c.amount;
+                } else if (c.status === 'passed') {
+                    collectedNonCash += c.amount;
+                }
+
+                const statusLabels = { pending: 'وصول نشده ⏳', passed: 'وصول شده ✅', bounced: 'برگشتی ❌' };
+                const isPending = c.status === 'pending';
+
+                checksBody.innerHTML += `
+                    <tr>
+                        <td>${t.customerName}</td>
+                        <td>${c.bank}</td>
+                        <td>${c.number}</td>
+                        <td>${c.dueDate}</td>
+                        <td>${c.amount.toLocaleString()} ریال</td>
+                        <td><strong>${statusLabels[c.status]}</strong></td>
+                        <td class="actions-cell">
+                            ${isPending ? `
+                                <button class="btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="updateCheckStatus(${t.id}, ${c.id}, 'passed')">وصول شد</button>
+                                <button class="btn-danger" style="padding: 4px 8px; font-size:11px;" onclick="updateCheckStatus(${t.id}, ${c.id}, 'bounced')">برگشت</button>
+                            ` : '-'}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        // ۲. محاسبات اقساط
+        if (t.installments && Array.isArray(t.installments)) {
+            let paidCount = 0;
+            let unpaidSum = 0;
+            t.installments.forEach(ins => {
+                if (ins.status === 'unpaid') {
+                    pendingInst += ins.amount;
+                    unpaidSum += ins.amount;
+                } else {
+                    collectedNonCash += ins.amount;
+                    paidCount += 1;
+                }
+            });
+
+            const allPaid = paidCount === t.installments.length;
+            const remaining = t.remainingBalance || 0;
+
+            accountsBody.innerHTML += `
+                <tr>
+                    <td><strong>${t.customerName}</strong> <br><small>فاکتور: ${Math.floor(t.id).toString().slice(-6)}</small></td>
+                    <td>${t.totalPrice.toLocaleString()} ریال</td>
+                    <td>${(t.downPayment || 0).toLocaleString()} ریال</td>
+                    <td style="color: ${remaining > 0 ? 'var(--danger)' : 'var(--success)'}; font-weight: bold;">
+                        ${remaining.toLocaleString()} ریال
+                    </td>
+                    <td>${t.installments.length} / ${paidCount} قسط</td>
+                    <td><strong>${allPaid ? 'تسویه کامل ✅' : 'فعال ⏳'}</strong></td>
+                    <td>
+                        <button class="btn-print" style="padding: 4px 10px; font-size:12px; background: #3b82f6" onclick="openInstallmentDetails(${t.id})">مشاهده دفترچه</button>
+                    </td>
+                </tr>
+            `;
+        }
+    });
+
+    document.getElementById('totalPendingChecks').innerText = pendingChecks.toLocaleString() + ' ریال';
+    document.getElementById('totalPendingInstallments').innerText = pendingInst.toLocaleString() + ' ریال';
+    document.getElementById('totalCollectedNonCash').innerText = collectedNonCash.toLocaleString() + ' ریال';
+}
+
+function updateCheckStatus(transId, checkId, newStatus) {
+    const t = transactions.find(x => x.id === transId);
+    if (t && t.checks) {
+        const c = t.checks.find(x => x.id === checkId);
+        if (c) {
+            c.status = newStatus;
+            if (newStatus === 'passed') {
+                t.remainingBalance = Math.max(0, t.remainingBalance - c.amount);
+            }
+            saveData();
+            renderAccounts();
+            updateAccounting();
+        }
+    }
+}
+
+function openInstallmentDetails(transId) {
+    const t = transactions.find(x => x.id === transId);
+    if (!t) return;
+
+    document.getElementById('instModalCustomer').innerText = `${t.customerName} (تلفن: ${t.customerPhone || 'نامشخص'})`;
+    document.getElementById('instModalTotalDebt').innerText = (t.totalPrice - t.downPayment).toLocaleString() + ' ریال';
+    document.getElementById('instModalRemaining').innerText = t.remainingBalance.toLocaleString() + ' ریال';
+
+    const tbody = document.getElementById('instDetailTableBody');
+    tbody.innerHTML = '';
+
+    t.installments.forEach(ins => {
+        const isPaid = ins.status === 'paid';
+        tbody.innerHTML += `
+            <tr>
+                <td>قسط ${ins.number}</td>
+                <td>${ins.dueDate}</td>
+                <td>${ins.amount.toLocaleString()} ریال</td>
+                <td style="color: ${isPaid ? 'var(--success)' : 'var(--warning)'}; font-weight: bold;">
+                    ${isPaid ? 'پرداخت شده ✅' : 'در انتظار ⏳'}
+                </td>
+                <td>
+                    ${!isPaid ? `
+                        <button class="btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="payInstallment(${t.id}, ${ins.number})">ثبت پرداخت</button>
+                    ` : `<span style="font-size:11px; color:#64748b;">در تاریخ ${ins.payDate}</span>`}
+                </td>
+            </tr>
+        `;
+    });
+
+    document.getElementById('installmentDetailModal').style.display = 'flex';
+}
+
+function payInstallment(transId, instNumber) {
+    const t = transactions.find(x => x.id === transId);
+    if (t && t.installments) {
+        const ins = t.installments.find(x => x.number === instNumber);
+        if (ins) {
+            ins.status = 'paid';
+            ins.payDate = new Date().toLocaleDateString('fa-IR');
+            t.remainingBalance = Math.max(0, t.remainingBalance - ins.amount);
+
+            saveData();
+            renderAccounts();
+            openInstallmentDetails(transId); // بروزرسانی زنده مودال باز شده
+            updateAccounting();
+        }
+    }
+}
+
+// ==========================================
+// 9. مودال‌ها و جزئیات ویرایش محصولات
 // ==========================================
 window.calcEditPrice = function () {
     const buyInput = document.getElementById('editProdBuy');
@@ -714,7 +855,7 @@ window.saveEditProduct = function () {
 };
 
 function openReturnModal(id) { document.getElementById('returnTransId').value = id; document.getElementById('returnReason').value = ''; document.getElementById('returnModal').style.display = 'flex'; }
-function confirmReturn() { const id = parseInt(document.getElementById('returnTransId').value); const r = document.getElementById('returnReason').value; if (!r) return alert('دلیل؟'); const idx = transactions.findIndex(t => t.id === id); if (idx > -1) { const t = transactions[idx]; if (t.items) { t.items.forEach(it => { const p = products.find(x => x.id == it.productId); if (p) p.stock += it.amount; }); } else { const p = products.find(x => x.id == t.productId); if (p) p.stock += t.amount; } returns.unshift({ ...t, returnDate: new Date().toLocaleDateString('fa-IR'), returnReason: r }); transactions.splice(idx, 1); saveData(); updateDashboard(); updateAccounting(); renderInventoryTable(); calculateInventoryStats(); renderReturnsTable(); closeModal('returnModal'); alert('مرجوع شد'); } }
+function confirmReturn() { const id = parseInt(document.getElementById('returnTransId').value); const r = document.getElementById('returnReason').value; if (!r) return alert('دلیل؟'); const idx = transactions.findIndex(t => t.id === id); if (idx > -1) { const t = transactions[idx]; if (t.items) { t.items.forEach(it => { const p = products.find(x => x.id == it.productId); if (p) p.stock += it.amount; }); } else { const p = products.find(x => x.id == t.productId); if (p) p.stock += t.amount; } returns.unshift({ ...t, returnDate: new Date().toLocaleDateString('fa-IR'), returnReason: r }); transactions.splice(idx, 1); saveData(); updateDashboard(); updateAccounting(); renderInventoryTable(); calculateInventoryStats(); renderReturnsTable(); renderAccounts(); closeModal('returnModal'); alert('مرجوع شد'); } }
 
 function renderReturnsTable() { const t = document.getElementById('returnsTableBody'); t.innerHTML = ''; returns.forEach(r => { t.innerHTML += `<tr><td>${r.items ? r.items.length + ' قلم' : r.productName}</td><td style="color:#c0392b">${r.amount || '-'}</td><td>${r.totalPrice.toLocaleString()}</td><td>${r.returnDate}</td><td>${r.returnReason}</td></tr>` }); }
 function showSection(id) { document.querySelectorAll('.section').forEach(s => s.classList.remove('active-section')); document.querySelectorAll('.sidebar nav button').forEach(b => b.classList.remove('active')); document.getElementById(id).classList.add('active-section'); const btn = document.getElementById('btn-' + id); if (btn) btn.classList.add('active'); }
