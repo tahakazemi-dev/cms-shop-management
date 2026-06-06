@@ -1203,3 +1203,5 @@ function autoCalcSell(prefix) {
         sellInput.value = Math.round(sellPrice).toLocaleString();
     }
 }
+
+console.log("test commit")
