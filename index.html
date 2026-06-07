@@ -6,6 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>مدیریت فرش | نسخه اصلاح شده نهایی</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/libs/persian-datepicker.min.css">
+    <script src="/libs/jquery-3.6.0.min.js"></script>
+    <script src="/libs/persian-date.min.js"></script>
+    <script src="/libs/persian-datepicker.min.js"></script>
 </head>
 
 <body>
@@ -64,11 +68,12 @@
                     <h3>لیست فاکتورها</h3>
                     <table>
                         <thead>
-                            <tr>
+                            <tr class="factor-lists">
                                 <th>شماره</th>
                                 <th>مشتری</th>
                                 <th>مبلغ کل</th>
-                                <th>تاریخ</th>
+                                <th>روش تسویه</th>
+                                <th>تاریخ فاکتور</th>
                                 <th>عملیات</th>
                             </tr>
                         </thead>
@@ -158,8 +163,11 @@
                                         placeholder="مثلا ملی"></div>
                                 <div class="form-group"><label>شماره صیاد / چک:</label><input type="text"
                                         id="checkNumber" placeholder="123456"></div>
-                                <div class="form-group"><label>تاریخ سررسید چک:</label><input type="text"
-                                        id="checkDueDate" placeholder="1405/04/01"></div>
+                                <div class="form-group">
+                                    <label>تاریخ سررسید چک:</label>
+                                    <input type="text" id="checkDueDate" class="p-date" readonly
+                                        placeholder="کلیک کنید 📅" style="cursor: pointer; background: #fff;">
+                                </div>
                             </div>
                         </div>
 
@@ -176,7 +184,9 @@
                                 </div>
                                 <div class="form-group">
                                     <label>تاریخ اولین قسط:</label>
-                                    <input type="text" id="firstInstallmentDate" placeholder="1405/04/01">
+                                    <input type="text" id="firstInstallmentDate" class="p-date" readonly
+                                        placeholder="کلیک کنید 📅" style="cursor: pointer; background: #fff;"
+                                        onchange="calcInstallmentAmounts()">
                                 </div>
                                 <div class="form-group">
                                     <label>مبلغ هر قسط (ریال):</label>
@@ -291,8 +301,10 @@
                         <thead>
                             <tr>
                                 <th>مشتری</th>
-                                <th>مبلغ کل</th>
-                                <th>سود</th>
+                                <th>مبلغ فاکتور</th>
+                                <th>دریافتی قطعی</th>
+                                <th>سود وصول شده</th>
+                                <th>روش تسویه</th>
                                 <th>تاریخ</th>
                             </tr>
                         </thead>
