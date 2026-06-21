@@ -1,6 +1,6 @@
 /**
  * Carpet Manager System
- * نسخه بهینه‌شده — رفع باگ‌ها و بهبود کد
+ * نسخه بهینه‌شده — رفع باگ‌ها و بهبود کد + فاکتور رسمی A4
  */
 
 // ==========================================
@@ -90,7 +90,6 @@ function loadDataFromLocalStorageFallback() {
 }
 
 async function saveData() {
-    // ذخیره در localStorage (شامل deleted ها هم می‌شود)
     try {
         localStorage.setItem('cm_products_v5', JSON.stringify(products));
         localStorage.setItem('cm_transactions_v5', JSON.stringify(transactions));
@@ -101,7 +100,6 @@ async function saveData() {
         console.warn('localStorage پر شد، فقط IndexedDB ذخیره می‌شود');
     }
 
-    // ذخیره در IndexedDB (اصلی)
     try {
         const db = await getDB();
         const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -147,7 +145,6 @@ function triggerSilentBackupDownload() {
 // راه‌اندازی اولیه
 // ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
-    // بررسی وضعیت ورود
     if (sessionStorage.getItem('isLoggedIn') === 'true') {
         const overlay = document.getElementById('loginOverlay');
         if (overlay) overlay.style.display = 'none';
@@ -167,7 +164,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEnterNavigation();
     renderAccounts();
 
-    // نمایش تاریخ جاری
     const dateEl = document.getElementById('currentDate');
     if (dateEl) {
         dateEl.innerText = new Date().toLocaleDateString('fa-IR', {
@@ -175,7 +171,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // بستن dropdown هنگام کلیک خارج
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.custom-select-wrapper')) {
             const list = document.getElementById('dropdownList');
@@ -183,7 +178,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // راه‌اندازی تقویم شمسی
     if (typeof $ !== 'undefined' && $.fn.persianDatepicker) {
         $('.p-date').persianDatepicker({
             format: 'YYYY/MM/DD',
@@ -197,9 +191,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-// ==========================================
-// ورود به سیستم
-// ==========================================
 function checkLogin() {
     const pass = document.getElementById('loginPass').value;
     if (pass === 'mehdimoket') {
@@ -211,43 +202,58 @@ function checkLogin() {
 }
 
 // ==========================================
-// توابع تاریخ شمسی
+// توابع تاریخ شمسی (اصلاح و مقاوم‌سازی شده)
 // ==========================================
-
-/**
- * اضافه کردن ماه به تاریخ شمسی با محاسبه دقیق تعداد روزهای هر ماه
- * ماه‌های ۱-۶  → ۳۱ روز
- * ماه‌های ۷-۱۱ → ۳۰ روز
- * ماه ۱۲       → ۲۹ روز (۳۰ در سال کبیسه)
- */
 function addJalaliMonths(dateStr, monthsToAdd) {
     if (!dateStr) return '';
-    const parts = dateStr.split('/');
+
+    // ۱. تبدیل تمام اعداد فارسی و عربی به اعداد انگلیسی استاندارد
+    let enDate = dateStr
+        .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+        .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+
+    // ۲. حذف فاصله‌های اضافی و جایگزینی احتمالی خط‌تیره با اسلش (/)
+    enDate = enDate.replace(/-/g, '/').replace(/\s/g, '');
+
+    const parts = enDate.split('/');
     if (parts.length !== 3) return dateStr;
 
-    let y = parseInt(parts[0]);
-    let m = parseInt(parts[1]);
-    let d = parseInt(parts[2]);
+    // تبدیل مقادیر به عدد صحیح
+    let y = parseInt(parts[0], 10);
+    let m = parseInt(parts[1], 10);
+    let d = parseInt(parts[2], 10);
 
+    // اگر باز هم عدد تشخیص داده نشد، همان ورودی را برگردان
+    if (isNaN(y) || isNaN(m) || isNaN(d)) return dateStr;
+
+    // ۳. محاسبه ماه‌های اقساط
     m += monthsToAdd;
-    while (m > 12) { m -= 12; y += 1; }
+    while (m > 12) {
+        m -= 12;
+        y += 1;
+    }
 
-    // تعداد روزهای ماه مقصد
+    // ۴. تشخیص روزهای آخر ماه (۳۱ روزه، ۳۰ روزه و اسفند)
     let maxDay;
     if (m <= 6) {
         maxDay = 31;
     } else if (m <= 11) {
         maxDay = 30;
     } else {
-        // ماه ۱۲: بررسی سال کبیسه
+        // سال‌های کبیسه شمسی (تقریبی)
         const isLeap = [1, 5, 9, 13, 17, 22, 26, 30].includes(y % 33);
         maxDay = isLeap ? 30 : 29;
     }
 
     if (d > maxDay) d = maxDay;
 
-    return `${y}/${m < 10 ? '0' + m : m}/${d < 10 ? '0' + d : d}`;
+    // ۵. اضافه کردن صفر پشت ماه‌ها و روزهای یک رقمی (مثل 05 یا 09)
+    const finalM = m < 10 ? '0' + m : m;
+    const finalD = d < 10 ? '0' + d : d;
+
+    return `${y}/${finalM}/${finalD}`;
 }
+
 
 // ==========================================
 // Toast Notification (جایگزین alert)
@@ -316,25 +322,25 @@ function updateAccounting() {
 
 function renderTransactionsTable(list) {
     const tb = document.getElementById('transactionsTableBody');
-    tb.innerHTML = '';
-    list.forEach(t => {
-        tb.innerHTML += `
-            <tr>
-                <td>${Math.floor(t.id).toString().slice(-6)}</td>
-                <td>
-                    <strong>${t.customerName || '-'}</strong>
-                    <div style="font-size:11px; color:#64748b; margin-top:3px;">📞 <span dir="ltr">${t.customerPhone || 'ثبت نشده'}</span></div>
-                </td>
-                <td>${t.totalPrice.toLocaleString()}</td>
-                <td style="color:#2563eb; font-weight:bold;">${paymentTypeMap[t.paymentType] || 'نقدی 💵'}</td>
-                <td>${t.date}</td>
-                <td class="actions-cell">
-                    <button class="btn-print" onclick="printInvoice(${t.id})" title="چاپ فاکتور">🖨️</button>
-                    <button class="btn-warning" onclick="openReturnModal(${t.id})" title="مرجوعی">↩️</button>
-                    <button class="btn-danger" onclick="delTrans(${t.id})" title="حذف">🗑️</button>
-                </td>
-            </tr>`;
-    });
+    if (!tb) return;
+    // استفاده از join به جای += برای جلوگیری از reflow مکرر و overflow
+    tb.innerHTML = list.map(t => `
+        <tr>
+            <td>${Math.floor(t.id).toString().slice(-6)}</td>
+            <td style="max-width:160px; overflow:hidden;">
+                <strong>${t.customerName || '-'}</strong>
+                <div style="font-size:11px; color:#64748b; margin-top:3px; direction:ltr; text-align:right;">${t.customerPhone || 'ثبت نشده'}</div>
+            </td>
+            <td style="white-space:nowrap;">${t.totalPrice.toLocaleString()}</td>
+            <td style="color:#2563eb; font-weight:bold; white-space:nowrap;">${paymentTypeMap[t.paymentType] || 'نقدی 💵'}</td>
+            <td style="white-space:nowrap;">${t.date}</td>
+            <td class="actions-cell" style="white-space:nowrap;">
+                <button class="btn-print" style="background:#0ea5e9;" onclick="openItemsModal(${t.id})" title="مشاهده اقلام خریداری شده">📦</button>
+                <button class="btn-print" onclick="printInvoice(${t.id})" title="چاپ فاکتور">🖨️</button>
+                <button class="btn-warning" onclick="openReturnModal(${t.id})" title="مرجوعی">↩️</button>
+                <button class="btn-danger" onclick="delTrans(${t.id})" title="حذف">🗑️</button>
+            </td>
+        </tr>`).join('');
 }
 
 function renderAccountingTable(list) {
@@ -388,14 +394,31 @@ function calcInstallmentAmounts() {
     cart.forEach(item => total += item.total);
     const down = getRawPrice('downPayment');
     const count = parseInt(document.getElementById('installmentCount').value) || 1;
+    const interestPercentEl = document.getElementById('installmentInterestPercent');
+    const interestPercent = interestPercentEl ? (parseFloat(interestPercentEl.value) || 0) : 0;
     const remaining = total - down;
     const displayEl = document.getElementById('installmentAmountDisplay');
     if (!displayEl) return;
     if (remaining < 0) {
         displayEl.value = 'پیش‌پرداخت مازاد!';
+        const beforeEl = document.getElementById('instBeforeInterest');
+        const interestEl = document.getElementById('instInterestAmount');
+        const afterEl = document.getElementById('instAfterInterest');
+        if (beforeEl) beforeEl.innerText = '0';
+        if (interestEl) interestEl.innerText = '0';
+        if (afterEl) afterEl.innerText = '0';
         return;
     }
-    displayEl.value = Math.round(remaining / count).toLocaleString() + ' ریال';
+    const interestAmount = Math.round(remaining * (interestPercent / 100));
+    const remainingWithInterest = remaining + interestAmount;
+    displayEl.value = Math.round(remainingWithInterest / count).toLocaleString() + ' ریال';
+
+    const beforeEl = document.getElementById('instBeforeInterest');
+    const interestEl = document.getElementById('instInterestAmount');
+    const afterEl = document.getElementById('instAfterInterest');
+    if (beforeEl) beforeEl.innerText = remaining.toLocaleString() + ' ریال';
+    if (interestEl) interestEl.innerText = interestAmount.toLocaleString() + ' ریال';
+    if (afterEl) afterEl.innerText = remainingWithInterest.toLocaleString() + ' ریال';
 }
 
 function addCheckToList() {
@@ -468,7 +491,10 @@ function calculateLivePrice() {
     if (pid && !isNaN(amt) && amt > 0) {
         const p = products.find(x => x.id == pid);
         if (p) {
-            liveEl.innerText = Math.round((p.sellPrice * amt) * (1 + per / 100)).toLocaleString() + ' ریال';
+            // فرمول یکسان با addToCart: قیمت × مقدار × (1 + درصد/100)
+            // اگر درصد منفی باشد (تخفیف) هم درست کار می‌کند
+            const finalPrice = Math.round(p.sellPrice * amt * (1 + per / 100));
+            liveEl.innerText = Math.max(0, finalPrice).toLocaleString() + ' ریال';
             return;
         }
     }
@@ -494,6 +520,8 @@ function addToCart() {
     cart.push({
         productId: p.id,
         productName: p.name,
+        serial: p.serial || '',
+        barcode: p.barcode || '',
         unitPrice: p.sellPrice,
         buyPrice: p.buyPrice,
         amount: amt,
@@ -588,11 +616,12 @@ function checkout() {
     let installments = [];
     const downPaymentVal = getRawPrice('downPayment') || 0;
     let remainingBalance = 0;
+    let installmentInterestPercent = 0;
+    let installmentInterestAmount = 0;
 
     if (paymentType === 'check') {
         if (currentChecks.length === 0) {
             showToast('هیچ چکی ثبت نشده است!', 'warning');
-            // برگرداندن موجودی
             cart.forEach(item => {
                 const p = products.find(x => x.id == item.productId);
                 if (p) p.stock += item.amount;
@@ -631,7 +660,12 @@ function checkout() {
             });
             return;
         }
-        remainingBalance = totalAmount - downPaymentVal;
+        const interestPercentEl = document.getElementById('installmentInterestPercent');
+        installmentInterestPercent = interestPercentEl ? (parseFloat(interestPercentEl.value) || 0) : 0;
+        const remainingBeforeInterest = totalAmount - downPaymentVal;
+        installmentInterestAmount = Math.round(remainingBeforeInterest * (installmentInterestPercent / 100));
+        remainingBalance = remainingBeforeInterest + installmentInterestAmount;
+        totalProfit += installmentInterestAmount;
         const instAmount = Math.round(remainingBalance / count);
         for (let i = 0; i < count; i++) {
             installments.push({
@@ -656,7 +690,9 @@ function checkout() {
         checks,
         installments,
         downPayment: downPaymentVal,
-        remainingBalance
+        remainingBalance,
+        installmentInterestPercent,
+        installmentInterestAmount
     };
 
     transactions.unshift(transaction);
@@ -682,6 +718,8 @@ function checkout() {
     document.getElementById('chkDate').value = '';
     document.getElementById('installmentCount').value = '6';
     document.getElementById('firstInstallmentDate').value = '';
+    const interestResetEl = document.getElementById('installmentInterestPercent');
+    if (interestResetEl) interestResetEl.value = '0';
     togglePaymentFields();
 
     showToast('فاکتور با موفقیت ثبت شد ✅', 'success');
@@ -700,7 +738,8 @@ function recalculateInvoice(transId) {
     } else if (t.paymentType === 'installment') {
         let paid = 0;
         t.installments.forEach(ins => { if (ins.status === 'paid') paid += ins.amount; });
-        t.remainingBalance = Math.max(0, t.totalPrice - (t.downPayment || 0) - paid);
+        const totalPayable = t.totalPrice - (t.downPayment || 0) + (t.installmentInterestAmount || 0);
+        t.remainingBalance = Math.max(0, totalPayable - paid);
     }
 }
 
@@ -820,7 +859,8 @@ function openInstallmentDetails(transId) {
     const t = transactions.find(x => x.id === transId);
     if (!t) return;
     document.getElementById('instModalCustomer').innerText = `${t.customerName} (تلفن: ${t.customerPhone || 'نامشخص'})`;
-    document.getElementById('instModalTotalDebt').innerText = (t.totalPrice - (t.downPayment || 0)).toLocaleString() + ' ریال';
+    const initialDebt = (t.totalPrice - (t.downPayment || 0)) + (t.installmentInterestAmount || 0);
+    document.getElementById('instModalTotalDebt').innerText = initialDebt.toLocaleString() + ' ریال';
     document.getElementById('instModalRemaining').innerText = (t.remainingBalance || 0).toLocaleString() + ' ریال';
 
     const tbody = document.getElementById('instDetailTableBody');
@@ -843,6 +883,33 @@ function openInstallmentDetails(transId) {
             </tr>`;
     });
     document.getElementById('installmentDetailModal').style.display = 'flex';
+}
+
+function openItemsModal(transId) {
+    const t = transactions.find(x => x.id === transId);
+    if (!t) return;
+
+    document.getElementById('itemsModalCustomer').innerText = t.customerName || '-';
+    document.getElementById('itemsModalInvoiceNum').innerText = Math.floor(t.id).toString().slice(-6);
+    document.getElementById('itemsModalCount').innerText = (t.items || []).length;
+    document.getElementById('itemsModalTotal').innerText = (t.totalPrice || 0).toLocaleString() + ' ریال';
+
+    const tbody = document.getElementById('itemsDetailTableBody');
+    tbody.innerHTML = '';
+    (t.items || []).forEach((item, idx) => {
+        const unitLabel = item.unit === 'meter' ? 'متر' : 'عدد';
+        const unitPrice = item.amount ? Math.round(item.total / item.amount) : 0;
+        tbody.innerHTML += `
+            <tr>
+                <td>${idx + 1}</td>
+                <td>${item.productName || '-'}${item.percent ? ` <small>(${item.percent}%)</small>` : ''}</td>
+                <td>${item.serial || '-'}</td>
+                <td>${item.amount} ${unitLabel}</td>
+                <td>${unitPrice.toLocaleString()} ریال</td>
+                <td>${(item.total || 0).toLocaleString()} ریال</td>
+            </tr>`;
+    });
+    document.getElementById('itemsDetailModal').style.display = 'flex';
 }
 
 function payInstallment(transId, instNumber) {
@@ -1044,9 +1111,11 @@ function toggleDropdown() {
 function filterDropdown(q) {
     const list = document.getElementById('dropdownList');
     list.classList.add('show');
+    // حذف toLowerCase برای فارسی — مقایسه مستقیم رشته
+    const qNorm = q.trim();
     const items = list.children;
     for (let item of items) {
-        item.style.display = (q === '' || item.dataset.search.includes(q.toLowerCase())) ? 'block' : 'none';
+        item.style.display = (qNorm === '' || item.dataset.search.includes(qNorm)) ? 'block' : 'none';
     }
 }
 
@@ -1107,6 +1176,8 @@ function delTrans(id) {
         saveData();
         updateDashboard();
         updateAccounting();
+        renderInventoryTable();
+        calculateInventoryStats();
         renderTrash();
         renderAccounts();
     }
@@ -1137,6 +1208,8 @@ function restoreTrans(id) {
         saveData();
         updateDashboard();
         updateAccounting();
+        renderInventoryTable();
+        calculateInventoryStats();
         renderAccounts();
         renderTrash();
         showToast('فاکتور بازیابی شد ✅', 'success');
@@ -1145,6 +1218,7 @@ function restoreTrans(id) {
 
 function renderTrash() {
     const pBody = document.getElementById('trashProductsBody');
+    if (!pBody) return;
     pBody.innerHTML = '';
     deletedProducts.forEach(x => {
         pBody.innerHTML += `
@@ -1159,6 +1233,7 @@ function renderTrash() {
     });
 
     const tBody = document.getElementById('trashTransactionsBody');
+    if (!tBody) return;
     tBody.innerHTML = '';
     deletedTransactions.forEach(t => {
         tBody.innerHTML += `
@@ -1307,353 +1382,507 @@ function renderReturnsTable() {
 // اطلاعات ثابت فروشگاه — فقط اینجا ویرایش کنید
 // ==========================================
 const STORE_INFO = {
-    name: 'تزئینات نوین ظریف مصور',          // نام فروشگاه
-    subtitle: 'نمایندگی موکت ظریف مصور احمدی',    // زیرعنوان
+    name: 'فرش و لوازم خانگی احمدیه',          // نام فروشگاه
+    // subtitle: 'نمایندگی موکت ظریف مصور احمدی',    // زیرعنوان
     phone1: '09928905769',                       // شماره اول
     phone2: '09938812959',                       // شماره دوم
     instagram: 'zarifmosavarmis',                   // پیج اینستاگرام (بدون @)
-    address: 'پنج بنگله، بالاتر از فروشگاه رفاه، جنب فروشگاه جانبو',
-    city: 'تهران',                             // شهر
+    address: 'مسجدسلیمان ٫ دراشکفت بالاتر از پزشکی قانونی‌ ٫ جنب مبل طهران',
+    city: 'مسجدسلیمان',                             // شهر
     slogan: 'کیفیت را با قیمت مناسب تجربه کنید' // شعار (اختیاری)
 };
 
-// ==========================================
-// چاپ فاکتور — مناسب پرینتر حرارتی ۸۰ میلی‌متری
-// ==========================================
-function printInvoice(transId) {
-    const t = transactions.find(x => x.id === transId);
-    if (!t) return;
 
-    // ساخت ردیف‌های کالا
-    let itemsHtml = '';
-    const items = (t.items && Array.isArray(t.items)) ? t.items : [{
-        productName: t.productName || '-',
-        amount: t.amount || 1,
-        total: t.totalPrice
-    }];
+// تابع تبدیل عدد به حروف فارسی
+function numToPersianWords(number) {
+    const units = ["", "یک", "دو", "سه", "چهار", "پنج", "شش", "هفت", "هشت", "نه"];
+    const tens = ["", "ده", "بیست", "سی", "چهل", "پنجاه", "شصت", "هفتاد", "هشتاد", "نود"];
+    const teens = ["ده", "یازده", "دوازده", "سیزده", "چهارده", "پانزده", "شانزده", "هفده", "هجده", "نوزده"];
+    const hundreds = ["", "صد", "دویست", "سیصد", "چهارصد", "پانصد", "ششصد", "هفتصد", "هشتصد", "نهصد"];
+    const scales = ["", "هزار", "میلیون", "میلیارد", "تریلیون"];
 
-    items.forEach((item, idx) => {
-        const unitPrice = Math.round(item.total / item.amount);
-        const unitLabel = item.unit === 'meter' ? 'متر' : 'عدد';
-        const discNote = item.percent && item.percent != 0
-            ? `<div class="item-note">${item.percent > 0 ? 'اضافه' : 'تخفیف'}: ${Math.abs(item.percent)}%</div>`
-            : '';
-        itemsHtml += `
-            <tr class="${idx % 2 === 0 ? 'row-even' : 'row-odd'}">
-                <td class="col-name">
-                    ${item.productName}
-                    ${item.serial ? `<div class="item-note">سریال: ${item.serial}</div>` : ''}
-                    ${discNote}
-                </td>
-                <td class="col-qty">${item.amount} ${unitLabel}</td>
-                <td class="col-price">${unitPrice.toLocaleString()}</td>
-                <td class="col-total">${item.total.toLocaleString()}</td>
-            </tr>`;
-    });
+    if (number === 0) return "صفر";
+    let numStr = number.toString();
+    let result = [];
+    let scaleIndex = 0;
 
-    // بلوک اطلاعات تسویه
-    let settlementHtml = '';
-    const payLabels = { cash: 'نقدی', check: 'چکی', installment: 'اقساطی' };
-    const payLabel = payLabels[t.paymentType] || 'نقدی';
+    while (numStr.length > 0) {
+        let chunk = numStr.slice(-3);
+        numStr = numStr.slice(0, -3);
+        let chunkNum = parseInt(chunk);
 
-    if (t.paymentType === 'cash') {
-        settlementHtml = `
-            <div class="settle-row">
-                <span>روش پرداخت:</span>
-                <span class="settle-val">نقدی ✓</span>
-            </div>`;
-    } else if (t.paymentType === 'check') {
-        const downF = (t.downPayment || 0).toLocaleString();
-        settlementHtml = `
-            <div class="settle-row"><span>روش تسویه:</span><span class="settle-val">ترکیبی (نقد + چک)</span></div>
-            <div class="settle-row"><span>پیش‌پرداخت نقدی:</span><span class="settle-val">${downF} ریال</span></div>`;
-        if (t.checks && t.checks.length > 0) {
-            settlementHtml += `<div class="settle-checks">`;
-            t.checks.forEach((c, i) => {
-                settlementHtml += `
-                    <div class="settle-row" style="font-size:7.5px;">
-                        <span>چک ${i + 1} — ${c.bank} — ${c.dueDate}</span>
-                        <span>${c.amount.toLocaleString()} ریال</span>
-                    </div>`;
-            });
-            settlementHtml += `</div>`;
+        if (chunkNum !== 0) {
+            let chunkText = [];
+            let h = Math.floor(chunkNum / 100);
+            let t = Math.floor((chunkNum % 100) / 10);
+            let u = chunkNum % 10;
+
+            if (h > 0) chunkText.push(hundreds[h]);
+            if (t === 1) {
+                chunkText.push(teens[u]);
+            } else {
+                if (t > 1) chunkText.push(tens[t]);
+                if (u > 0) chunkText.push(units[u]);
+            }
+
+            let text = chunkText.join(" و ");
+            if (scaleIndex > 0) text += " " + scales[scaleIndex];
+            result.unshift(text);
         }
-    } else if (t.paymentType === 'installment') {
-        const downF = (t.downPayment || 0).toLocaleString();
-        const remF = (t.remainingBalance || 0).toLocaleString();
-        const cnt = t.installments ? t.installments.length : 0;
-        const instAmt = (cnt > 0 && t.installments[0]) ? t.installments[0].amount.toLocaleString() : '-';
-        const firstDue = (cnt > 0 && t.installments[0]) ? t.installments[0].dueDate : '-';
-        settlementHtml = `
-            <div class="settle-row"><span>روش تسویه:</span><span class="settle-val">اقساطی</span></div>
-            <div class="settle-row"><span>پیش‌پرداخت:</span><span class="settle-val">${downF} ریال</span></div>
-            <div class="settle-row"><span>باقی‌مانده بدهی:</span><span class="settle-val red">${remF} ریال</span></div>
-            <div class="settle-row"><span>تعداد اقساط:</span><span class="settle-val">${cnt} قسط</span></div>
-            <div class="settle-row"><span>مبلغ هر قسط:</span><span class="settle-val">${instAmt} ریال</span></div>
-            <div class="settle-row"><span>اولین سررسید:</span><span class="settle-val">${firstDue}</span></div>`;
+        scaleIndex++;
+    }
+    return result.join(" و ") + " ریال";
+}
+
+// چحلاپ فاکتور (قالب A4 حرفه‌ای — طرح نوین)
+function printInvoice(transId) {
+    const transaction = transactions.find(t => t.id === transId);
+    if (!transaction) return;
+
+    let itemsHtml = '';
+    let rowNum = 1;
+    const EMPTY_ROWS = 8; // حداقل ردیف‌های خالی جدول
+
+    if (transaction.items && Array.isArray(transaction.items)) {
+        transaction.items.forEach(item => {
+            const unitPrice = Math.round(item.total / item.amount);
+            const itemCode = item.barcode || item.productId?.toString().slice(-6) || '—';
+            itemsHtml += `
+                <tr>
+                    <td class="tc">${rowNum++}</td>
+                    <td class="tc">${itemCode}</td>
+                    <td class="tr">${item.productName}${item.serial ? ` <small style="color:#555;">(${item.serial})</small>` : ''}</td>
+                    <td class="tc">${item.amount}</td>
+                    <td class="tc">${item.unit === 'meter' ? 'متر' : 'دستگاه'}</td>
+                    <td class="tn">${unitPrice.toLocaleString()}</td>
+                    <td class="tn">${item.total.toLocaleString()}</td>
+                </tr>`;
+        });
+    } else {
+        itemsHtml += `
+            <tr>
+                <td class="tc">1</td><td class="tc">—</td>
+                <td class="tr">${transaction.productName || '—'}</td>
+                <td class="tc">${transaction.amount || 1}</td>
+                <td class="tc">—</td>
+                <td class="tn">—</td>
+                <td class="tn">${transaction.totalPrice.toLocaleString()}</td>
+            </tr>`;
+        rowNum = 2;
     }
 
-    // شماره فاکتور ۶ رقمی
-    const invoiceNum = Math.floor(t.id).toString().slice(-6);
+    // ردیف‌های خالی برای زیبایی و امکان نوشتن دستی
+    const filledRows = rowNum - 1;
+    const extraRows = Math.max(0, EMPTY_ROWS - filledRows);
+    for (let i = 0; i < extraRows; i++) {
+        itemsHtml += `<tr><td class="tc"> </td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+    }
+
+    const words = numToPersianWords(transaction.totalPrice);
+    const invoiceId = Math.floor(transaction.id).toString().slice(-6);
+    const isCash = transaction.paymentType === 'cash';
+    const isCheck = transaction.paymentType === 'check';
+    const isInstallment = transaction.paymentType === 'installment';
+
+    // اطلاعات پرداخت تکمیلی
+    let paymentDetails = '';
+    if (isCheck && transaction.checks?.length) {
+        paymentDetails = transaction.checks.map(c =>
+            `چک ${c.bank} — شماره ${c.number} — مبلغ ${c.amount.toLocaleString()} ریال — سررسید ${c.dueDate}`
+        ).join('<br>');
+    } else if (isInstallment && transaction.installments?.length) {
+        paymentDetails = `${transaction.installments.length} قسط — پیش‌پرداخت: ${(transaction.downPayment || 0).toLocaleString()} ریال`;
+    }
 
     const printArea = document.getElementById('printArea');
     printArea.className = 'invoice-mode';
+
     printArea.innerHTML = `
 <style>
-/* ========= ریست و صفحه ========= */
 @media print {
-    @page { margin: 0; size: 80mm auto; }
-    body { margin: 0; padding: 0; background: #fff; }
+    @page { size: A4 portrait; margin: 8mm 10mm; }
+    body { margin: 0 !important; padding: 0 !important; background: #fff; }
+    .no-print { display: none !important; }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 .inv-wrap {
-    width: 76mm;
+    width: 190mm;
     margin: 0 auto;
-    padding: 3mm 2mm 5mm;
-    font-family: 'Tahoma', 'Segoe UI', sans-serif;
-    font-size: 8.5pt;
-    color: #111;
     direction: rtl;
-    line-height: 1.55;
+    font-family: 'Tahoma', 'B Nazanin', sans-serif;
+    font-size: 10.5pt;
+    color: #000;
     background: #fff;
 }
 
-/* ========= سربرگ ========= */
-.inv-head {
-    text-align: center;
-    padding-bottom: 3mm;
-    margin-bottom: 3mm;
-    border-bottom: 0.5mm solid #000;
+/* ── هدر اصلی ── */
+.inv-top {
+    display: flex;
+    align-items: stretch;
+    border: 1.5pt solid #000;
+    border-bottom: none;
 }
-.inv-store-name {
+.inv-top-right {
+    flex: 1;
+    padding: 8px 10px;
+    border-left: 1pt solid #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+}
+.inv-top-right .store-name {
     font-size: 14pt;
     font-weight: 900;
-    letter-spacing: 0.5px;
+    color: #1a1a1a;
 }
-.inv-store-sub {
-    font-size: 8pt;
-    margin-top: 1mm;
+.inv-top-right .store-sub {
+    font-size: 9pt;
+    color: #444;
 }
-.inv-store-meta {
-    font-size: 7.5pt;
-    margin-top: 1mm;
+.inv-top-right .store-contact {
+    font-size: 9pt;
+    color: #333;
+    margin-top: 4px;
     line-height: 1.7;
 }
-.inv-store-meta span { display: inline-block; margin: 0 1mm; }
-.inv-slogan {
-    margin-top: 2mm;
-    font-size: 7pt;
-    font-style: italic;
-    color: #555;
-    border-top: 0.3mm dashed #aaa;
-    padding-top: 1.5mm;
-}
-
-/* ========= کادر مشتری ========= */
-.inv-customer {
-    border: 0.4mm solid #aaa;
-    border-radius: 1.5mm;
-    padding: 2mm 3mm;
-    margin-bottom: 3mm;
-    font-size: 8pt;
-}
-.inv-customer-row {
+.inv-top-center {
+    flex: 0 0 auto;
     display: flex;
-    justify-content: space-between;
-    line-height: 1.8;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 20px;
+    border-left: 1pt solid #000;
 }
-.inv-customer-row .lbl { color: #444; font-size: 7.5pt; }
-.inv-customer-row .val { font-weight: bold; }
-.inv-invoice-num {
+.inv-title {
+    font-size: 16pt;
+    font-weight: 900;
     text-align: center;
-    font-size: 7pt;
-    color: #666;
-    margin-top: 1mm;
-    border-top: 0.2mm dashed #ccc;
-    padding-top: 1mm;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
 }
+.inv-top-left {
+    flex: 0 0 120px;
+    padding: 8px 10px;
+    font-size: 9.5pt;
+    line-height: 2;
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.inv-top-left .meta-row { display: flex; justify-content: space-between; gap: 4px; }
+.inv-top-left .meta-label { font-weight: bold; white-space: nowrap; }
 
-/* ========= جدول کالاها ========= */
-.inv-table-wrap { margin-bottom: 2mm; }
-table {
+/* ── بخش‌های اطلاعات ── */
+.inv-section-head {
+    background: #d4d4d4;
+    font-weight: bold;
+    text-align: center;
+    padding: 4px;
+    border: 1.5pt solid #000;
+    border-top: none;
+    font-size: 10pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+.inv-info-grid {
+    display: grid;
+    border: 1.5pt solid #000;
+    border-top: none;
+    border-bottom: none;
+}
+.inv-info-row {
+    display: flex;
+    border-bottom: 1pt solid #000;
+}
+.inv-info-row:last-child { border-bottom: none; }
+.inv-info-cell {
+    flex: 1;
+    padding: 5px 8px;
+    border-left: 1pt solid #000;
+    font-size: 9.5pt;
+    line-height: 1.6;
+}
+.inv-info-cell:first-child { border-right: none; }
+.inv-info-cell:last-child { border-left: none; }
+.inv-info-cell .lbl { font-weight: bold; }
+
+/* ── جدول کالا ── */
+.inv-items-wrap {
+    border: 1.5pt solid #000;
+    border-top: none;
+    border-bottom: none;
+}
+.inv-items-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 8pt;
 }
-thead tr {
-    border-bottom: 0.5mm solid #000;
-    border-top: 0.5mm solid #000;
+.inv-items-table thead tr {
+    background: #d4d4d4;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
 }
-th {
-    padding: 1.5mm 0;
+.inv-items-table th {
+    border: 1pt solid #aaa;
+    padding: 5px 4px;
+    font-size: 9pt;
+    text-align: center;
     font-weight: bold;
-    font-size: 7.5pt;
-    background: none;
-    color: #111;
 }
-td {
-    padding: 1.5mm 0;
-    vertical-align: top;
-    border-bottom: 0.2mm dotted #bbb;
+.inv-items-table tbody tr { height: 22px; }
+.inv-items-table tbody tr:nth-child(even) {
+    background: #f7f7f7;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
 }
-.row-even td { background: #f9f9f9; }
-.row-odd  td { background: #fff;    }
-.col-name  { width: 36%; text-align: right;  padding-right: 1mm; }
-.col-qty   { width: 15%; text-align: center; }
-.col-price { width: 22%; text-align: center; }
-.col-total { width: 27%; text-align: left;   font-weight: bold; padding-left: 1mm; }
-.item-note { font-size: 7pt; color: #777; }
-tfoot tr   { border-top: 0.5mm solid #000; }
-tfoot td   { padding: 1.5mm 0; font-weight: bold; font-size: 9pt; }
+.inv-items-table td {
+    border: 0.5pt solid #ccc;
+    border-right: 1pt solid #999;
+    padding: 3px 5px;
+    font-size: 9.5pt;
+    vertical-align: middle;
+}
+.inv-items-table td:last-child { border-left: none; }
+.inv-items-table td:first-child { border-right: none; }
+.tc { text-align: center; }
+.tr { text-align: right; }
+.tn { text-align: center; direction: ltr; }
 
-/* ========= بلوک جمع ========= */
-.inv-totals {
-    border: 0.4mm dashed #888;
-    border-radius: 1.5mm;
-    padding: 2mm 3mm;
-    margin: 3mm 0;
-    background: #fafafa;
-}
-.inv-total-row {
+/* ── خلاصه مبلغ ── */
+.inv-summary {
     display: flex;
-    justify-content: space-between;
-    font-size: 8pt;
-    line-height: 2;
+    border: 1.5pt solid #000;
+    border-top: 1.5pt solid #000;
 }
-.inv-grand {
-    border-top: 0.4mm solid #000;
-    margin-top: 1mm;
-    padding-top: 1.5mm;
-    font-size: 11pt;
-    font-weight: 900;
-}
-
-/* ========= تسویه ========= */
-.inv-settle {
-    border: 0.4mm solid #ccc;
-    border-radius: 1.5mm;
-    padding: 2mm 3mm;
-    margin-bottom: 3mm;
-    background: #f5f5f5;
-}
-.inv-settle-title {
-    font-size: 8pt;
-    font-weight: bold;
-    margin-bottom: 1.5mm;
-    border-bottom: 0.2mm dashed #bbb;
-    padding-bottom: 1mm;
-}
-.settle-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 8pt;
+.inv-summary-right {
+    flex: 2;
+    padding: 8px 10px;
+    border-left: 1pt solid #000;
+    font-size: 9.5pt;
     line-height: 1.9;
 }
-.settle-val  { font-weight: bold; }
-.settle-val.red { color: #c00; }
-.settle-checks { margin-top: 1mm; }
-
-/* ========= پاورقی ========= */
-.inv-footer {
-    text-align: center;
-    font-size: 7.5pt;
-    border-top: 0.4mm dashed #aaa;
-    padding-top: 2mm;
-    margin-top: 2mm;
-    color: #555;
-    line-height: 1.8;
-}
-.inv-thankyou {
-    font-size: 9pt;
+.inv-summary-right .words-row {
     font-weight: bold;
-    color: #111;
-    margin-bottom: 1mm;
+    font-size: 10pt;
+    margin-bottom: 6px;
+    border-bottom: 0.5pt dashed #999;
+    padding-bottom: 5px;
+}
+.inv-payment-type {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    margin-top: 5px;
+}
+.chk-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 9.5pt;
+}
+.chk-box {
+    width: 13px;
+    height: 13px;
+    border: 1pt solid #000;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10pt;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+.inv-summary-left {
+    flex: 0 0 150px;
+}
+.inv-totals-table {
+    width: 100%;
+    border-collapse: collapse;
+    height: 100%;
+}
+.inv-totals-table td {
+    border: 0.5pt solid #000;
+    border-left: none;
+    border-right: none;
+    padding: 4px 8px;
+    font-size: 9pt;
+    vertical-align: middle;
+}
+.inv-totals-table tr:last-child td { border-bottom: none; }
+.inv-totals-table tr:first-child td { border-top: none; }
+.inv-totals-table .tlbl {
+    background: #d4d4d4;
+    font-weight: bold;
+    text-align: center;
+    width: 55%;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    border-left: 0.5pt solid #000;
+}
+.inv-totals-table .tval {
+    text-align: center;
+    direction: ltr;
+}
+.inv-totals-table .highlight-row td {
+    background: #1a1a1a;
+    color: #fff;
+    font-weight: bold;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+/* ── فوتر ── */
+.inv-footer {
+    display: flex;
+    border: 1.5pt solid #000;
+    border-top: none;
+    min-height: 80px;
+}
+.inv-footer-cell {
+    flex: 1;
+    padding: 6px 8px;
+    border-left: 1pt solid #000;
+    font-size: 9pt;
+}
+.inv-footer-cell:last-child { border-left: none; }
+.inv-footer-cell .f-title {
+    font-weight: bold;
+    text-align: center;
+    display: block;
+    margin-bottom: 4px;
+    border-bottom: 0.5pt solid #ccc;
+    padding-bottom: 3px;
+}
+
+/* ── واترمارک ── */
+.inv-watermark {
+    text-align: center;
+    font-size: 8pt;
+    color: #999;
+    margin-top: 4px;
+    padding-bottom: 2px;
 }
 </style>
 
 <div class="inv-wrap">
 
-    <!-- سربرگ -->
-    <div class="inv-head">
-        <div class="inv-store-name">${STORE_INFO.name}</div>
-        <div class="inv-store-sub">${STORE_INFO.subtitle}</div>
-        <div class="inv-store-meta">
-            <span>📞 ${STORE_INFO.phone1}</span>
-            <span>|</span>
-            <span>${STORE_INFO.phone2}</span>
-            <br>
-            <span>📍 ${STORE_INFO.address}</span>
-            <br>
-            <span>📸 @${STORE_INFO.instagram}</span>
+    <!-- هدر -->
+    <div class="inv-top">
+        <div class="inv-top-right">
+            <div class="store-name">${STORE_INFO.name}</div>
+            <div class="store-sub">${STORE_INFO.subtitle || ''}</div>
+            <div class="store-contact">
+                📍 ${STORE_INFO.address}${STORE_INFO.city ? ' — ' + STORE_INFO.city : ''}<br>
+                📞 ${STORE_INFO.phone1}${STORE_INFO.phone2 ? ' &nbsp;|&nbsp; ' + STORE_INFO.phone2 : ''}
+                ${STORE_INFO.instagram ? `&nbsp;|&nbsp; 📸 @${STORE_INFO.instagram}` : ''}
+            </div>
         </div>
-        ${STORE_INFO.slogan ? `<div class="inv-slogan">${STORE_INFO.slogan}</div>` : ''}
+        <div class="inv-top-center">
+            <div class="inv-title">پیش فاکتور فروش<br>کالا و خدمات</div>
+        </div>
+        <div class="inv-top-left">
+            <div class="meta-row"><span class="meta-label">شماره سریال:</span> <span>${invoiceId}</span></div>
+            <div class="meta-row"><span class="meta-label">تاریخ:</span> <span>${transaction.date}</span></div>
+            <div class="meta-row"><span class="meta-label">تاریخ اعتبار:</span> <span>—</span></div>
+        </div>
     </div>
 
-    <!-- اطلاعات مشتری -->
-    <div class="inv-customer">
-        <div class="inv-customer-row">
-            <span class="lbl">خریدار:</span>
-            <span class="val">${t.customerName || 'ناشناس'}</span>
+    <!-- مشخصات فروشنده -->
+    <div class="inv-section-head">مشخصات فروشنده</div>
+    <div class="inv-info-grid">
+        <div class="inv-info-row">
+            <div class="inv-info-cell" style="flex:2"><span class="lbl">نام فروشنده: </span>${STORE_INFO.name}</div>
+            <div class="inv-info-cell"><span class="lbl">شماره اقتصادی: </span>—</div>
+            <div class="inv-info-cell"><span class="lbl">شناسه ملی: </span>—</div>
         </div>
-        <div class="inv-customer-row">
-            <span class="lbl">تلفن:</span>
-            <span class="val" dir="ltr">${t.customerPhone || '—'}</span>
+        <div class="inv-info-row">
+            <div class="inv-info-cell" style="flex:2"><span class="lbl">نشانی: </span>${STORE_INFO.address}</div>
+            <div class="inv-info-cell"><span class="lbl">کد پستی: </span>—</div>
+            <div class="inv-info-cell"><span class="lbl">تلفن: </span><span dir="ltr">${STORE_INFO.phone1}</span></div>
         </div>
-        <div class="inv-customer-row">
-            <span class="lbl">تاریخ:</span>
-            <span class="val">${t.date}</span>
-        </div>
-        <div class="inv-invoice-num">شماره فاکتور: ${invoiceNum}</div>
     </div>
 
-    <!-- جدول کالاها -->
-    <div class="inv-table-wrap">
-        <table>
+    <!-- مشخصات خریدار -->
+    <div class="inv-section-head">مشخصات خریدار</div>
+    <div class="inv-info-grid">
+        <div class="inv-info-row">
+            <div class="inv-info-cell" style="flex:2"><span class="lbl">نام خریدار: </span>${transaction.customerName || 'ناشناس'}</div>
+            <div class="inv-info-cell"><span class="lbl">شماره اقتصادی: </span>—</div>
+            <div class="inv-info-cell"><span class="lbl">شناسه ملی: </span>—</div>
+        </div>
+        <div class="inv-info-row">
+            <div class="inv-info-cell" style="flex:2"><span class="lbl">نشانی: </span>—</div>
+            <div class="inv-info-cell"><span class="lbl">کد پستی: </span>—</div>
+            <div class="inv-info-cell"><span class="lbl">تلفن: </span><span dir="ltr">${transaction.customerPhone || '—'}</span></div>
+        </div>
+    </div>
+
+    <!-- جدول کالا -->
+    <div class="inv-section-head">مشخصات کالا یا خدمات مورد معامله</div>
+    <div class="inv-items-wrap">
+        <table class="inv-items-table">
             <thead>
                 <tr>
-                    <th class="col-name">شرح کالا</th>
-                    <th class="col-qty">مقدار</th>
-                    <th class="col-price">فی (ریال)</th>
-                    <th class="col-total">جمع (ریال)</th>
+                    <th style="width:5%">ردیف</th>
+                    <th style="width:10%">کد کالا</th>
+                    <th style="width:35%">شرح کالا / خدمت</th>
+                    <th style="width:8%">تعداد/<br>مقدار</th>
+                    <th style="width:7%">واحد</th>
+                    <th style="width:17%">مبلغ واحد</th>
+                    <th style="width:18%">مبلغ کل</th>
                 </tr>
             </thead>
             <tbody>${itemsHtml}</tbody>
-            <tfoot>
-                <tr>
-                    <td colspan="3" style="text-align:right; padding-right:1mm; font-size:8pt;">جمع کل اقلام:</td>
-                    <td class="col-total" style="font-size:9pt;">${t.totalPrice.toLocaleString()}</td>
-                </tr>
-            </tfoot>
         </table>
     </div>
 
-    <!-- جمع و تخفیف -->
-    <div class="inv-totals">
-        <div class="inv-total-row">
-            <span>تعداد اقلام:</span>
-            <span>${items.length} ردیف</span>
+    <!-- خلاصه -->
+    <div class="inv-summary">
+        <div class="inv-summary-right">
+            <div class="words-row">مبلغ به حروف: ${words}</div>
+            <div><span style="font-weight:bold">شرایط و نحوه فروش:</span></div>
+            <div class="inv-payment-type">
+                <div class="chk-item">
+                    <div class="chk-box">${isCash ? '✓' : ''}</div> نقدی
+                </div>
+                <div class="chk-item">
+                    <div class="chk-box">${isCheck ? '✓' : ''}</div> چکی
+                </div>
+                <div class="chk-item">
+                    <div class="chk-box">${isInstallment ? '✓' : ''}</div> اقساطی
+                </div>
+            </div>
+            ${paymentDetails ? `<div style="margin-top:5px; font-size:8.5pt; color:#333; border-top:0.5pt dashed #aaa; padding-top:4px;">${paymentDetails}</div>` : ''}
         </div>
-        <div class="inv-total-row inv-grand">
-            <span>مبلغ قابل پرداخت:</span>
-            <span>${t.totalPrice.toLocaleString()} ریال</span>
+        <div class="inv-summary-left">
+            <table class="inv-totals-table">
+                <tr><td class="tlbl">جمع کل</td><td class="tval">${transaction.totalPrice.toLocaleString()}</td></tr>
+                <tr><td class="tlbl">اضافات</td><td class="tval">—</td></tr>
+                <tr><td class="tlbl">تخفیف</td><td class="tval">—</td></tr>
+                <tr><td class="tlbl">مالیات و عوارض</td><td class="tval">—</td></tr>
+                <tr class="highlight-row"><td class="tlbl">مبلغ پرداختی</td><td class="tval">${transaction.totalPrice.toLocaleString()}</td></tr>
+            </table>
         </div>
     </div>
 
-    <!-- روش تسویه -->
-    <div class="inv-settle">
-        <div class="inv-settle-title">🧾 جزئیات تسویه‌حساب</div>
-        ${settlementHtml}
-    </div>
-
-    <!-- پاورقی -->
+    <!-- فوتر -->
     <div class="inv-footer">
-        <div class="inv-thankyou">✦ از خرید شما سپاسگزاریم ✦</div>
-        <div>کالای خریداری شده تا ۷ روز قابل تعویض می‌باشد</div>
-        <div>در صورت بروز مشکل با فروشگاه تماس بگیرید</div>
-        <div style="margin-top:1mm; font-size:7pt;">⚡ سیستم مدیریت هوشمند فروشگاه</div>
+        <div class="inv-footer-cell" style="flex:2.5">
+            <span class="f-title">توضیحات</span>
+            ${(transaction.downPayment && transaction.downPayment > 0)
+            ? `پیش‌پرداخت دریافت شده: ${transaction.downPayment.toLocaleString()} ریال<br>مانده: ${(transaction.totalPrice - transaction.downPayment).toLocaleString()} ریال`
+            : ''}
+        </div>
+        <div class="inv-footer-cell">
+            <span class="f-title">مهر و امضای خریدار</span>
+        </div>
+        <div class="inv-footer-cell">
+            <span class="f-title">مهر و امضای فروشنده</span>
+        </div>
     </div>
 
+    <div class="inv-watermark">${STORE_INFO.slogan || ''}</div>
 </div>`;
 
     window.print();
@@ -1661,7 +1890,7 @@ tfoot td   { padding: 1.5mm 0; font-weight: bold; font-size: 9pt; }
 }
 
 // ==========================================
-// چاپ لیبل قیمت — مناسب A4 (۳×۲ لیبل در صفحه)
+// چاپ لیبل قیمت
 // ==========================================
 function printLabel(id) {
     const product = products.find(p => p.id === id);
@@ -1694,7 +1923,6 @@ function printLabel(id) {
     direction: rtl;
 }
 
-/* هر لیبل: ۹۰×۵۰ میلی‌متر — ۳ ستون × ۵ ردیف = ۱۵ لیبل در A4 */
 .label-card {
     width: 90mm;
     height: 50mm;
@@ -1709,7 +1937,6 @@ function printLabel(id) {
     page-break-inside: avoid;
 }
 
-/* نوار رنگی بالا */
 .label-top-bar {
     background: #1e293b;
     color: #fff;
@@ -1728,7 +1955,6 @@ function printLabel(id) {
     opacity: 0.8;
 }
 
-/* بدنه اصلی لیبل */
 .label-body {
     flex: 1;
     display: flex;
@@ -1737,7 +1963,6 @@ function printLabel(id) {
     gap: 2mm;
 }
 
-/* سمت راست: نام و مشخصات */
 .label-info {
     flex: 1;
     display: flex;
@@ -1760,7 +1985,6 @@ function printLabel(id) {
     color: #64748b;
 }
 
-/* سمت چپ: قیمت */
 .label-price-box {
     display: flex;
     flex-direction: column;
@@ -1790,7 +2014,6 @@ function printLabel(id) {
     margin-top: 0.5mm;
 }
 
-/* بخش بارکد پایین */
 .label-barcode-section {
     border-top: 0.3mm dashed #ccc;
     padding: 1mm 3mm 1.5mm;
@@ -1819,79 +2042,6 @@ function printLabel(id) {
 </style>
 
 <div class="label-page">
-    <!-- لیبل اول - نسخه اصلی -->
-    <div class="label-card">
-        <div class="label-top-bar">
-            <span class="label-store-name">${STORE_INFO.name}</span>
-            <span class="label-category">${catLabel}</span>
-        </div>
-        <div class="label-body">
-            <div class="label-info">
-                <div class="label-prod-name">${product.name}</div>
-                ${product.brand ? `<div class="label-brand">برند: ${product.brand}</div>` : ''}
-                ${product.serial ? `<div class="label-serial">مشخصات: ${product.serial}</div>` : ''}
-            </div>
-            <div class="label-price-box">
-                <div class="label-price-title">قیمت فروش</div>
-                <div class="label-price-amount">${priceFormatted}</div>
-                <div class="label-price-unit">ریال / ${unitLabel}</div>
-            </div>
-        </div>
-        <div class="label-barcode-section">
-            <div class="label-barcode-svg-wrap">${barcodeSVG}</div>
-            <div class="label-barcode-num">${product.barcode}</div>
-        </div>
-    </div>
-
-    <!-- لیبل دوم - کپی یدک -->
-    <div class="label-card">
-        <div class="label-top-bar">
-            <span class="label-store-name">${STORE_INFO.name}</span>
-            <span class="label-category">${catLabel}</span>
-        </div>
-        <div class="label-body">
-            <div class="label-info">
-                <div class="label-prod-name">${product.name}</div>
-                ${product.brand ? `<div class="label-brand">برند: ${product.brand}</div>` : ''}
-                ${product.serial ? `<div class="label-serial">مشخصات: ${product.serial}</div>` : ''}
-            </div>
-            <div class="label-price-box">
-                <div class="label-price-title">قیمت فروش</div>
-                <div class="label-price-amount">${priceFormatted}</div>
-                <div class="label-price-unit">ریال / ${unitLabel}</div>
-            </div>
-        </div>
-        <div class="label-barcode-section">
-            <div class="label-barcode-svg-wrap">${barcodeSVG}</div>
-            <div class="label-barcode-num">${product.barcode}</div>
-        </div>
-    </div>
-
-    <!-- لیبل سوم -->
-    <div class="label-card">
-        <div class="label-top-bar">
-            <span class="label-store-name">${STORE_INFO.name}</span>
-            <span class="label-category">${catLabel}</span>
-        </div>
-        <div class="label-body">
-            <div class="label-info">
-                <div class="label-prod-name">${product.name}</div>
-                ${product.brand ? `<div class="label-brand">برند: ${product.brand}</div>` : ''}
-                ${product.serial ? `<div class="label-serial">مشخصات: ${product.serial}</div>` : ''}
-            </div>
-            <div class="label-price-box">
-                <div class="label-price-title">قیمت فروش</div>
-                <div class="label-price-amount">${priceFormatted}</div>
-                <div class="label-price-unit">ریال / ${unitLabel}</div>
-            </div>
-        </div>
-        <div class="label-barcode-section">
-            <div class="label-barcode-svg-wrap">${barcodeSVG}</div>
-            <div class="label-barcode-num">${product.barcode}</div>
-        </div>
-    </div>
-
-    <!-- لیبل چهارم -->
     <div class="label-card">
         <div class="label-top-bar">
             <span class="label-store-name">${STORE_INFO.name}</span>
@@ -1991,7 +2141,6 @@ function closeModal(id) {
     document.getElementById(id).style.display = 'none';
 }
 
-// بستن مودال با کلیک بیرون از آن
 document.addEventListener('click', function (e) {
     if (e.target.classList.contains('modal')) {
         e.target.style.display = 'none';
