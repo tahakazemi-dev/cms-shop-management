@@ -15,7 +15,7 @@
 <body>
 
     <!-- پنجره ورود -->
-    <div class="login-overlay" id="loginOverlay">
+    <!-- <div class="login-overlay" id="loginOverlay">
         <div class="login-box">
             <svg viewBox="0 0 24 24" style="width:48px;height:48px;color:#2563eb;margin:0 auto 10px;display:block;">
                 <path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
@@ -27,7 +27,7 @@
             <p id="loginError" style="display:none; color:#ef4444; font-size:13px; margin-top:5px;">رمز اشتباه است</p>
             <button class="btn-primary" onclick="checkLogin()" style="margin-top:10px;">ورود</button>
         </div>
-    </div>
+    </div> -->
 
     <div class="app-container">
         <aside class="sidebar">
@@ -291,9 +291,20 @@
                                         placeholder="کلیک کنید 📅" onchange="calcInstallmentAmounts()">
                                 </div>
                                 <div class="form-group">
+                                    <label>سود اقساط % (روی مانده):</label>
+                                    <input type="number" id="installmentInterestPercent" value="0" min="0" step="0.1"
+                                        oninput="calcInstallmentAmounts()">
+                                </div>
+                                <div class="form-group">
                                     <label>مبلغ هر قسط (ریال):</label>
                                     <input type="text" id="installmentAmountDisplay" readonly class="readonly-calc">
                                 </div>
+                            </div>
+                            <div class="check-summary" style="margin-top:10px;">
+                                مانده قبل از سود: <strong id="instBeforeInterest">0</strong> |
+                                مبلغ سود: <strong id="instInterestAmount" style="color:var(--success);">0</strong> |
+                                مانده با سود (قابل تقسیط): <strong id="instAfterInterest"
+                                    style="color:var(--primary);">0</strong>
                             </div>
                         </div>
                     </div>
@@ -620,6 +631,37 @@
                         </tr>
                     </thead>
                     <tbody id="instDetailTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- مودال اقلام فاکتور -->
+    <div id="itemsDetailModal" class="modal">
+        <div class="modal-content" style="max-width:650px; text-align:right;">
+            <span class="close-modal" onclick="closeModal('itemsDetailModal')">&times;</span>
+            <h2 style="margin-bottom:15px;">اقلام خریداری شده</h2>
+            <div class="inst-summary">
+                <p><strong>مشتری:</strong> <span id="itemsModalCustomer">-</span> |
+                    <strong>شماره فاکتور:</strong> <span id="itemsModalInvoiceNum">-</span>
+                </p>
+                <p><strong>تعداد اقلام:</strong> <span id="itemsModalCount">0</span> |
+                    <strong>جمع کل:</strong> <span id="itemsModalTotal" class="remaining-amount">0</span>
+                </p>
+            </div>
+            <div class="inventory-list" style="max-height:400px; overflow-y:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>نام کالا</th>
+                            <th>سریال/مدل/رنگ</th>
+                            <th>مقدار</th>
+                            <th>فی واحد</th>
+                            <th>جمع</th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemsDetailTableBody"></tbody>
                 </table>
             </div>
         </div>
